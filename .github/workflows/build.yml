@@ -35,7 +35,7 @@ jobs:
             # 步骤 4：执行静态编译
             - name: Build Binary
               run: |
-                  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o pvm-linux-amd64 main.go
+                  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o pvp-linux-amd64 main.go
 
             # 步骤 5：把编译好的文件作为 Artifact 保存下来，在网页端随时下载
             - name: Upload Artifact
