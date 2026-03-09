@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -10,10 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type S3Storage struct {
-	Client    *transfermanager.Client
 	Endpoint  string
 	AccessKey string
 	SecretKey string
@@ -37,7 +38,62 @@ func (s *S3Storage) getS3Client(ctx context.Context) (*s3.Client, error) {
 	return s3Client, nil
 }
 
-func (s *S3Storage) DownloadStream(ctx context.Context, bucket string, key string) (io.Reader, error) {
+func (s *S3Storage) ListObjectKeysWithPrefix(ctx context.Context, bucketName string, prefix string) ([]string, error) {
+	s3Client, err := s.getS3Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var objectKeys []string
+
+	paginator := s3.NewListObjectsV2Paginator(s3Client, &s3.ListObjectsV2Input{
+		Bucket: aws.String(bucketName),
+		Prefix: aws.String(prefix),
+	})
+
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("无法获取 S3 对象列表: %w", err)
+		}
+
+		for _, obj := range page.Contents {
+			if obj.Key != nil {
+				objectKeys = append(objectKeys, *obj.Key)
+			}
+		}
+	}
+
+	return objectKeys, nil
+
+}
+
+func (s *S3Storage) ObjectExists(ctx context.Context, bucket string, key string) (bool, error) {
+	s3Client, err := s.getS3Client(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	_, err = s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err == nil {
+		return true, nil
+	}
+
+	// 关键：判断错误是否是因为“找不到”
+	var nsk *types.NoSuchKey
+	var nf *types.NotFound
+	if errors.As(err, &nsk) || errors.As(err, &nf) {
+		return false, nil
+	}
+
+	// 其他错误（如网络问题、权限不足等）
+	return false, err
+}
+
+func (s S3Storage) GetObjectStream(ctx context.Context, bucket string, key string) (io.Reader, error) {
 	s3Client, err := s.getS3Client(ctx)
 	if err != nil {
 		return nil, err
@@ -56,7 +112,7 @@ func (s *S3Storage) DownloadStream(ctx context.Context, bucket string, key strin
 	return resp.Body, nil
 }
 
-func (s *S3Storage) UploadStream(ctx context.Context, bucket string, key string, reader io.Reader) error {
+func (s S3Storage) UploadStream(ctx context.Context, bucket string, key string, reader io.Reader) error {
 	s3Client, err := s.getS3Client(ctx)
 	if err != nil {
 		return err

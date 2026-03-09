@@ -1,0 +1,52 @@
+name: Build and Release PVM
+
+on:
+    push:
+        branches: ["main"]
+        tags:
+            - "v*"
+    pull_request:
+        branches: ["main"]
+
+jobs:
+    build:
+        name: Build PVP for Linux
+        runs-on: ubuntu-latest
+
+        steps:
+            # 步骤 1：拉取代码
+            - name: Checkout Code
+              uses: actions/checkout@v4
+
+            # 步骤 2：配置 Go 环境
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.22.x" # 建议填入你本地使用的 Go 版本，比如 1.22
+                  cache: true # 开启缓存，加速后续构建
+
+            # 步骤 3：下载依赖包
+            - name: Download Dependencies
+              run: go mod download
+
+            # 步骤 4：执行静态编译
+            - name: Build Binary
+              run: |
+                  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o pvm-linux-amd64 main.go
+
+            # 步骤 5：把编译好的文件作为 Artifact 保存下来，在网页端随时下载
+            - name: Upload Artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pvm-linux-amd64
+                  path: pvm-linux-amd64
+                  retention-days: 7
+
+            # 步骤 6：如果你推了一个 v1.0.0 的 Tag，自动创建 GitHub Release 并上传文件！
+            - name: Create Release and Upload Asset
+              uses: softprops/action-gh-release@v2
+              # 仅在打 tag 时触发此步骤
+              if: startsWith(github.ref, 'refs/tags/')
+              with:
+                  files: pvm-linux-amd64
+                  generate_release_notes: true # 自动根据 commit 生成更新日志
