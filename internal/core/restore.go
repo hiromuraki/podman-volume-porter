@@ -18,7 +18,7 @@ func (e Engine) MapBackupKey(ctx context.Context, volumeName string, keyPrefix s
 
 	// 2. 准备从 S3 拉取列表
 	searchKey := volumeName + "/" + keyPrefix
-	objKeys, err := e.Storage.ListObjectKeysWithPrefix(ctx, e.Config.BackupBucketName, searchKey)
+	objKeys, err := e.Storage.ListObjectKeysWithPrefix(ctx, Config.BackupBucketName, searchKey)
 	if err != nil {
 		return "", err
 	}
@@ -58,8 +58,8 @@ func (e Engine) MapBackupKey(ctx context.Context, volumeName string, keyPrefix s
 }
 
 func (e Engine) RestoreVolume(ctx context.Context, volumeName, key string) error {
-	e.Logger.Info(fmt.Sprintf("正在从 s3://%s/%s 获取数据...", e.Config.BackupBucketName, key))
-	objReader, err := e.Storage.GetObjectStream(ctx, e.Config.BackupBucketName, key)
+	e.Logger.Info(fmt.Sprintf("正在从 s3://%s/%s 获取数据...", Config.BackupBucketName, key))
+	objReader, err := e.Storage.GetObjectStream(ctx, Config.BackupBucketName, key)
 	if err != nil {
 		return err
 	}

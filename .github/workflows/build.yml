@@ -51,7 +51,7 @@ jobs:
               # 仅在打 tag 时触发此步骤
               if: startsWith(github.ref, 'refs/tags/')
               with:
-                  files: pvm-linux-amd64
+                  files: pvp-linux-amd64
                   generate_release_notes: true # 自动根据 commit 生成更新日志
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

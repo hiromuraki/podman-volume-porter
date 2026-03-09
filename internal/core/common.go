@@ -21,12 +21,6 @@ type Engine struct {
 	Storage S3Storage
 	Logger  Logger
 	UI      UI
-	Config  Config
-}
-
-type Config struct {
-	BackupBucketName string
-	Timeout          int
 }
 
 type Logger interface {

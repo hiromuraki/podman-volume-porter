@@ -6,37 +6,16 @@ import (
 	"fmt"
 	"os"
 	"podman-volumes-porter/internal/core"
-	"strconv"
 	"time"
 )
-
-func getEnv(key string, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return fallback
-}
-
-func getIntEnv(key string, fallback int) int {
-	valStr, exists := os.LookupEnv(key)
-	if !exists {
-		return fallback
-	}
-	valInt, err := strconv.Atoi(valStr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "环境变量 %s=%s 无效，将使用默认值 %d\n", key, valStr, fallback)
-		return fallback
-	}
-	return valInt
-}
 
 func printUsage() {
 	fmt.Println("用法: pvp <command> [options]")
 	fmt.Println("\n命令:")
-	fmt.Println("  backup <volume_name> [--forceOverride] 备份指定的 Podman 卷")
+	fmt.Println("  backup <volume_name> [--allow-override] 备份指定的 Podman 卷")
 	fmt.Println("  restore <volume_name> [--from key] 恢复指定的 Podman 卷")
 	fmt.Println("\n环境变量:")
-	fmt.Println("  S3_ENDPOINT         S3 兼容存储地址 (必填)")
+	fmt.Println("  S3_ENDPOINT_URL     S3 兼容存储地址 (必填)")
 	fmt.Println("  S3_ACCESS_KEY       S3 Access Key (必填)")
 	fmt.Println("  S3_SECRET_KEY       S3 Secret Key (必填)")
 	fmt.Println("  BACKUP_BUCKET_NAME  存储桶名称 (默认: container-volume)")
@@ -44,22 +23,19 @@ func printUsage() {
 }
 
 func main() {
+	core.LoadConfig()
 	engine := core.Engine{
 		Logger: core.ConsoleLogger{},
 		UI:     core.ConsoleUI{},
 		Storage: core.S3Storage{
-			Endpoint:  getEnv("S3_ENDPOINT", "http://localhost:8333"),
-			AccessKey: getEnv("S3_ACCESS_KEY", "MySeaweedAccessKey"),
-			SecretKey: getEnv("S3_SECRET_KEY", "MySeaweedSecretKey123"),
-		},
-		Config: core.Config{
-			BackupBucketName: getEnv("BACKUP_BUCKET_NAME", "container-volume"),
-			Timeout:          getIntEnv("TASK_TIMEOUT", 7200),
+			EndpointUrl: core.GetEnv("S3_ENDPOINT_URL", ""),
+			AccessKey:   core.GetEnv("S3_ACCESS_KEY", ""),
+			SecretKey:   core.GetEnv("S3_SECRET_KEY", ""),
 		},
 	}
 
 	// 环境变量检查
-	if engine.Storage.Endpoint == "" || engine.Storage.AccessKey == "" || engine.Storage.SecretKey == "" {
+	if engine.Storage.EndpointUrl == "" || engine.Storage.AccessKey == "" || engine.Storage.SecretKey == "" {
 		engine.Logger.Error("缺少必要环境变量：S3_ENDPOINT，S3_ACCESS_KEY，S3_SECRET_KEY")
 		os.Exit(1)
 	}
@@ -75,9 +51,14 @@ func main() {
 
 	// 创建两个子命令的 FlagSet
 	backupCmd := flag.NewFlagSet("backup", flag.ExitOnError)
-	backupOverride := backupCmd.Bool("override", false, "备份数据存在时是否强制覆盖")
+	backupAllowOverride := backupCmd.Bool("allow-override", false, "备份数据存在时是否强制覆盖")
 	restoreCmd := flag.NewFlagSet("restore", flag.ExitOnError)
 	restoreFrom := restoreCmd.String("from", "", "指定恢复的备份前缀 (例如: daily_20260309)")
+
+	if !engine.Storage.IsAvailable(ctx) {
+		engine.Logger.Error("无法连接到 S3 存储，请检查网络或环境变量")
+		os.Exit(1)
+	}
 
 	switch os.Args[1] {
 	// 备份操作
@@ -89,10 +70,11 @@ func main() {
 			engine.Logger.Error("缺少 volume_name 参数。\n用法: pvp backup <volume_name>")
 			os.Exit(1)
 		}
-		print(*backupOverride)
-		err := engine.BackupVolume(ctx, volumeName, *backupOverride)
+		print(*backupAllowOverride)
+		err := engine.BackupVolume(ctx, volumeName, *backupAllowOverride)
 		if err != nil {
 			engine.Logger.Error(err.Error())
+			os.Exit(1)
 		}
 
 	// 恢复操作
@@ -108,10 +90,12 @@ func main() {
 		key, err := engine.MapBackupKey(ctx, volumeName, *restoreFrom)
 		if err != nil {
 			engine.Logger.Error(err.Error())
+			os.Exit(1)
 		}
 		err = engine.RestoreVolume(ctx, volumeName, key)
 		if err != nil {
 			engine.Logger.Error(err.Error())
+			os.Exit(1)
 		}
 
 	default:

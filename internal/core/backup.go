@@ -33,12 +33,12 @@ func getBackupKey(volumeName string) string {
 func (e Engine) BackupVolume(ctx context.Context, volumeName string, forceOverride bool) error {
 	key := getBackupKey(volumeName)
 
-	keyExists, err := e.Storage.ObjectExists(ctx, e.Config.BackupBucketName, key)
+	keyExists, err := e.Storage.ObjectExists(ctx, Config.BackupBucketName, key)
 	if err != nil {
-		return fmt.Errorf("无法检测文件 [%s]:%s 存在性", e.Config.BackupBucketName, key)
+		return fmt.Errorf("无法检测文件 [%s]:%s 存在性", Config.BackupBucketName, key)
 	}
 	if keyExists && !forceOverride {
-		return fmt.Errorf("文件 [%s]:%s 已存在", e.Config.BackupBucketName, key)
+		return fmt.Errorf("文件 [%s]:%s 已存在", Config.BackupBucketName, key)
 	}
 
 	// 内存管道逻辑
@@ -59,8 +59,8 @@ func (e Engine) BackupVolume(ctx context.Context, volumeName string, forceOverri
 		}
 	}()
 
-	e.Logger.Info(fmt.Sprintf("正在上传至 [%s]:%s", e.Config.BackupBucketName, key))
-	if err := e.Storage.UploadStream(ctx, e.Config.BackupBucketName, key, pr); err != nil {
+	e.Logger.Info(fmt.Sprintf("正在上传至 [%s]:%s", Config.BackupBucketName, key))
+	if err := e.Storage.UploadStream(ctx, Config.BackupBucketName, key, pr); err != nil {
 		return fmt.Errorf("传输失败: %w", err)
 	}
 
