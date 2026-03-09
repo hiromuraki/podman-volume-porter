@@ -15,8 +15,6 @@ const (
 	colorBlue   = "\033[34m"
 )
 
-const ()
-
 type Engine struct {
 	Storage S3Storage
 	Logger  Logger

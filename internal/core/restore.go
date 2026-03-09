@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func (e Engine) MapBackupKey(ctx context.Context, volumeName string, keyPrefix string) (string, error) {
+func (e Engine) GetMatchedBackupKey(ctx context.Context, volumeName string, keyPrefix string) (string, error) {
 	// 1. 如果 pos 是完整的 .tar.gz 路径，直接原样返回
 	if strings.HasSuffix(keyPrefix, ".tar.gz") {
 		return keyPrefix, nil

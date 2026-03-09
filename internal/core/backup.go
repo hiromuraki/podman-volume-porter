@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path"
 	"time"
 )
 
-func getBackupKey(volumeName string) string {
-	now := time.Now().UTC()
-
+func getBackupKey(volumeName string, now time.Time) string {
 	var backupType string
 
 	// 每月 1 号的备份视为月备份
@@ -25,13 +24,37 @@ func getBackupKey(volumeName string) string {
 		backupType = "daily"
 	}
 
-	timestamp := time.Now().UTC().Format("20060102T150405Z")
+	timestamp := now.Format("20060102T150405Z")
 
-	return fmt.Sprintf("%s/%s_%s.tar.gz", volumeName, backupType, timestamp)
+	return fmt.Sprintf("%s/%s_%s.tar.gz", volumeName, timestamp, backupType)
+}
+
+func filterVolumeNames(allVolumeNames []string, namePattern string) []string {
+	if len(allVolumeNames) == 0 {
+		return []string{}
+	}
+
+	matched := make([]string, 0)
+	for _, vol := range allVolumeNames {
+		isMatch, err := path.Match(namePattern, vol)
+		if err == nil && isMatch {
+			matched = append(matched, vol)
+		}
+	}
+	return matched
+}
+
+func GetMatchedVolumeNames(namePattern string) []string {
+	allVolumeNames := GetAllVolumeNames()
+	return filterVolumeNames(allVolumeNames, namePattern)
 }
 
 func (e Engine) BackupVolume(ctx context.Context, volumeName string, forceOverride bool) error {
-	key := getBackupKey(volumeName)
+	if !VolumeExists(ctx, volumeName) {
+		return fmt.Errorf("卷 %s 不存在", volumeName)
+	}
+
+	key := getBackupKey(volumeName, time.Now().UTC())
 
 	keyExists, err := e.Storage.ObjectExists(ctx, Config.BackupBucketName, key)
 	if err != nil {
