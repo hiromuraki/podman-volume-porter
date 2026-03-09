@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Podman Backup Daily at 4 AM
+
+[Timer]
+# 每天凌晨 4 点执行
+OnCalendar=*-*-* 04:00:00
+# 如果电脑在 4 点关机了，开机后立刻补全执行一次
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Backup Podman Volumes to S3
+After=network-online.target
+
+[Service]
+Type=oneshot
+
+EnvironmentFile=%h/.env
+
+WorkingDirectory=%h/
+ExecStart=/bin/pvp backup '*'
+
+Restart=on-failure
+RestartSec=3600
