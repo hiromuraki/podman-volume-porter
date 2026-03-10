@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
+	tmtypes "github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -113,7 +114,7 @@ func (s S3Storage) GetObjectStream(ctx context.Context, bucket string, key strin
 	}
 
 	// 2. 发起 GetObject 请求，拿到 S3 的响应体 (它是一个自带网络流的 io.ReadCloser)
-	// ⚠️ 注意：这里用的是原生 s3.Client，因为 transfermanager.Downloader 默认是并发切块下载，必须配合支持 WriteAt 的文件句柄使用，不适合纯流式管道。
+	// 注意：这里用的是原生 s3.Client，因为 transfermanager.Downloader 默认是并发切块下载，必须配合支持 WriteAt 的文件句柄使用，不适合纯流式管道。
 	resp, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -136,9 +137,10 @@ func (s S3Storage) UploadStream(ctx context.Context, bucket string, key string, 
 
 	// 5. 执行上传
 	_, err = tm.UploadObject(ctx, &transfermanager.UploadObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-		Body:   reader,
+		Bucket:            aws.String(bucket),
+		Key:               aws.String(key),
+		Body:              reader,
+		ChecksumAlgorithm: tmtypes.ChecksumAlgorithmSha256,
 	})
 
 	return err

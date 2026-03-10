@@ -45,12 +45,7 @@ func filterVolumeNames(allVolumeNames []string, namePattern string) []string {
 	return matched
 }
 
-func GetMatchedVolumeNames(namePattern string) []string {
-	allVolumeNames := GetAllVolumeNames()
-	return filterVolumeNames(allVolumeNames, namePattern)
-}
-
-func (e Engine) BackupVolume(ctx context.Context, volumeName string, allowOverride bool) error {
+func (e Engine) backupVolume(ctx context.Context, volumeName string, allowOverride bool) error {
 	if !VolumeExists(ctx, volumeName) {
 		return fmt.Errorf("卷 %s 不存在", volumeName)
 	}
@@ -83,11 +78,33 @@ func (e Engine) BackupVolume(ctx context.Context, volumeName string, allowOverri
 		}
 	}()
 
-	e.Logger.Info(fmt.Sprintf("正在上传至 [%s]:%s", Config.BackupBucketName, key))
 	if err := e.Storage.UploadStream(ctx, Config.BackupBucketName, key, pr); err != nil {
-		return fmt.Errorf("传输失败: %w", err)
+		return err
 	}
 
-	e.Logger.Success(fmt.Sprintf("卷 %s 备份成功", volumeName))
 	return nil
+}
+
+func (e Engine) BackupAction(ctx context.Context, volumeNamePattern string, allowOverride bool, dryRun bool) {
+	allVolumeNames := GetAllVolumeNames()
+	matchedVolumeNames := filterVolumeNames(allVolumeNames, volumeNamePattern)
+
+	if len(matchedVolumeNames) == 0 {
+		e.Logger.Error(fmt.Sprintf("未找到匹配的卷: %s", volumeNamePattern))
+		return
+	}
+
+	for _, v := range matchedVolumeNames {
+		if dryRun {
+			e.Logger.Info(fmt.Sprintf("[DryRun] 备份卷：%s", v))
+			continue
+		}
+
+		e.Logger.Info(fmt.Sprintf("备份卷：%s", v))
+		if err := e.backupVolume(ctx, v, allowOverride); err != nil {
+			e.Logger.Error(fmt.Sprintf("卷 %s 备份时发生错误: %v", v, err))
+		}
+
+		e.Logger.Success(fmt.Sprintf("卷 %s 备份成功", v))
+	}
 }

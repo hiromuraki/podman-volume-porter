@@ -33,29 +33,10 @@ var backupCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(core.Config.TaskTimeout)*time.Hour)
 		defer cancel()
 
-		pattern := args[0]
-		matchedVolumes := core.GetMatchedVolumeNames(pattern)
-
-		if len(matchedVolumes) == 0 {
-			engine.Logger.Error(fmt.Sprintf("未找到匹配的卷: %s", pattern))
-			return
-		}
-
-		for _, v := range matchedVolumes {
-			if dryRun {
-				engine.Logger.Info(fmt.Sprintf("[DryRun] 备份卷：%s", v))
-				continue
-			}
-
-			engine.Logger.Info(fmt.Sprintf("[DryRun] 备份卷：%s", v))
-			if err := engine.BackupVolume(ctx, v, allowOverride); err != nil {
-				engine.Logger.Error(fmt.Sprintf("卷 %s 备份失败: %v", v, err))
-			}
-		}
+		engine.BackupAction(ctx, args[0], allowOverride, dryRun)
 	},
 }
 
-// restoreCmd 对应 restore 命令
 var restoreCmd = &cobra.Command{
 	Use:   "restore <volume_name>",
 	Short: "从 S3 恢复指定的 Podman 卷",
@@ -64,21 +45,7 @@ var restoreCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(core.Config.TaskTimeout)*time.Hour)
 		defer cancel()
 
-		volumeName := args[0]
-		key, err := engine.GetMatchedBackupKey(ctx, volumeName, restoreFrom)
-		if err != nil {
-			engine.Logger.Error(err.Error())
-			return
-		}
-
-		if dryRun {
-			engine.Logger.Info(fmt.Sprintf("[DryRun] 将恢复卷：%s (源文件=%s)", volumeName, key))
-			return
-		}
-
-		if err := engine.RestoreVolume(ctx, volumeName, key); err != nil {
-			engine.Logger.Error(fmt.Sprintf("恢复失败: %v", err))
-		}
+		engine.RestoreAction(ctx, args[0], restoreFrom, dryRun)
 	},
 }
 
@@ -88,9 +55,8 @@ func init() {
 
 	// 子命令特有 Flag
 	backupCmd.Flags().BoolVar(&allowOverride, "allow-override", false, "备份数据存在时是否强制覆盖")
-	restoreCmd.Flags().StringVar(&restoreFrom, "from", "", "指定恢复的备份前缀 (例如: daily_20260309)")
+	restoreCmd.Flags().StringVar(&restoreFrom, "from", "", "指定恢复的备份前缀 (例如: 20260309)")
 
-	// 将子命令添加到根命令
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
 }
