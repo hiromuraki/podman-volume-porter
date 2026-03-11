@@ -35,7 +35,7 @@ func (s *S3Storage) getS3Client(ctx context.Context) (*s3.Client, error) {
 
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(s.EndpointUrl)
-		o.UsePathStyle = s.UsePathStyle
+		o.UsePathStyle = true
 	})
 
 	return s3Client, nil

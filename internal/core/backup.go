@@ -62,6 +62,8 @@ func (e Engine) backupVolume(ctx context.Context, volumeName string, allowOverri
 
 	// 内存管道逻辑
 	pr, pw := io.Pipe()
+	defer pr.Close()
+
 	go func() {
 		zw, _ := zstd.NewWriter(pw)
 
@@ -104,6 +106,7 @@ func (e Engine) BackupAction(ctx context.Context, volumeNamePattern string, allo
 		err := e.backupVolume(ctx, v, allowOverride)
 		if err != nil {
 			e.Logger.Error(fmt.Sprintf("卷 %s 备份时发生错误: %v", v, err))
+			continue
 		}
 
 		e.Logger.Success(fmt.Sprintf("卷 %s 备份成功", v))
