@@ -16,15 +16,17 @@ import (
 )
 
 type S3Storage struct {
-	EndpointUrl string
-	AccessKey   string
-	SecretKey   string
+	EndpointUrl  string
+	AccessKey    string
+	SecretKey    string
+	UsePathStyle bool
+	Region       string
 }
 
 func (s *S3Storage) getS3Client(ctx context.Context) (*s3.Client, error) {
 	staticCreds := credentials.NewStaticCredentialsProvider(s.AccessKey, s.SecretKey, "")
 	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion("us-east-1"),
+		config.WithRegion(s.Region),
 		config.WithCredentialsProvider(staticCreds),
 	)
 	if err != nil {
@@ -33,7 +35,7 @@ func (s *S3Storage) getS3Client(ctx context.Context) (*s3.Client, error) {
 
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(s.EndpointUrl)
-		o.UsePathStyle = true
+		o.UsePathStyle = s.UsePathStyle
 	})
 
 	return s3Client, nil

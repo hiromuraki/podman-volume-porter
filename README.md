@@ -36,6 +36,8 @@ Podman Volumes Porter 遵循云原生十二要素应用原则，所有敏感配�
 export S3_ENDPOINT_URL="http://localhost:8333" # S3 API 地址
 export S3_ACCESS_KEY="your_access_key"         # S3 Access Key
 export S3_SECRET_KEY="your_secret_key"         # S3 Secret Key
+# export S3_REGION="s3_region"                 # S3 区域
+# export S3_USE_PATH_STYLE="true|false"        # S3 是否使用路径模式
 # export BACKUP_BUCKET_NAME="container-volume" # 存储桶名称 (可选，默认 container-volume)
 ```
 
