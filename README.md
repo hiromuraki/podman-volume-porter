@@ -38,7 +38,7 @@ export S3_ACCESS_KEY="your_access_key"          # S3 Access Key
 export S3_SECRET_KEY="your_secret_key"          # S3 Secret Key
 export S3_REGION="cn-beijing"                   # （可选）S3 区域（默认 cn-beijing）
 export S3_USE_PATH_STYLE="false"                # （可选）S3 是否使用路径模式（默认 false）
-export S3_BACKUP_BUCKET_NAME="container-volume" # （可选）存储桶名称 (默认 container-volume)
+export S3_BUCKET_NAME="container-volume"        # （可选）存储桶名称 (默认 container-volume)
 ```
 
 ## 🚀 使用说明

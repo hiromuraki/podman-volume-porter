@@ -70,7 +70,7 @@ func setupEngine() {
 			EndpointUrl:  core.GetEnv("S3_ENDPOINT_URL", ""),
 			AccessKey:    core.GetEnv("S3_ACCESS_KEY", ""),
 			SecretKey:    core.GetEnv("S3_SECRET_KEY", ""),
-			BucketName:   core.GetEnv("S3_BACKUP_BUCKET_NAME", "container-volume"),
+			BucketName:   core.GetEnv("S3_BUCKET_NAME", "container-volume"),
 			Region:       core.GetEnv("S3_REGION", "cn-beijing"),
 			UsePathStyle: core.GetBoolEnv("S3_USE_PATH_STYLE", false),
 		},
