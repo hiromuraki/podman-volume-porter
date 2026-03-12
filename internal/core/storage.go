@@ -16,11 +16,12 @@ import (
 )
 
 type S3Storage struct {
-	EndpointUrl  string
-	AccessKey    string
-	SecretKey    string
-	UsePathStyle bool
-	Region       string
+	EndpointUrl      string
+	AccessKey        string
+	SecretKey        string
+	BackupBucketName string
+	UsePathStyle     bool
+	Region           string
 }
 
 func (s *S3Storage) getS3Client(ctx context.Context) (*s3.Client, error) {

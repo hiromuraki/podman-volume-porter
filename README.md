@@ -33,12 +33,12 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o podman-volume
 Podman Volumes Porter 遵循云原生十二要素应用原则，所有敏感配置均通过环境变量注入。运行前请确保环境中存在以下变量（推荐写入 `.bashrc` 或 `.env` 文件）：
 
 ```bash
-export S3_ENDPOINT_URL="http://localhost:8333" # S3 API 地址
-export S3_ACCESS_KEY="your_access_key"         # S3 Access Key
-export S3_SECRET_KEY="your_secret_key"         # S3 Secret Key
-# export S3_REGION="s3_region"                 # S3 区域
-# export S3_USE_PATH_STYLE="true|false"        # S3 是否使用路径模式
-# export BACKUP_BUCKET_NAME="container-volume" # 存储桶名称 (可选，默认 container-volume)
+export S3_ENDPOINT_URL="http://localhost:8333"  # S3 API 地址
+export S3_ACCESS_KEY="your_access_key"          # S3 Access Key
+export S3_SECRET_KEY="your_secret_key"          # S3 Secret Key
+export S3_REGION="cn-beijing"                   # （可选）S3 区域（默认 cn-beijing）
+export S3_USE_PATH_STYLE="false"                # （可选）S3 是否使用路径模式（默认 false）
+export S3_BACKUP_BUCKET_NAME="container-volume" # （可选）存储桶名称 (默认 container-volume)
 ```
 
 ## 🚀 使用说明

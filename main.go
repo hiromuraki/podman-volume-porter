@@ -67,11 +67,12 @@ func setupEngine() {
 		Logger: core.ConsoleLogger{},
 		UI:     core.ConsoleUI{},
 		Storage: core.S3Storage{
-			EndpointUrl:  core.GetEnv("S3_ENDPOINT_URL", ""),
-			AccessKey:    core.GetEnv("S3_ACCESS_KEY", ""),
-			SecretKey:    core.GetEnv("S3_SECRET_KEY", ""),
-			Region:       core.GetEnv("S3_REGION", "cn-beijing"),
-			UsePathStyle: core.GetBoolEnv("S3_USE_PATH_STYLE", false),
+			EndpointUrl:      core.GetEnv("S3_ENDPOINT_URL", ""),
+			AccessKey:        core.GetEnv("S3_ACCESS_KEY", ""),
+			SecretKey:        core.GetEnv("S3_SECRET_KEY", ""),
+			BackupBucketName: core.GetEnv("S3_BACKUP_BUCKET_NAME", "container-volume"),
+			Region:           core.GetEnv("S3_REGION", "cn-beijing"),
+			UsePathStyle:     core.GetBoolEnv("S3_USE_PATH_STYLE", false),
 		},
 	}
 

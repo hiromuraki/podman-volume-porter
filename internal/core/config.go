@@ -50,7 +50,6 @@ var Config *AppConfig
 
 func LoadConfig() {
 	Config = &AppConfig{
-		BackupBucketName: GetEnv("BACKUP_BUCKET_NAME", "container-volume"),
-		TaskTimeout:      GetIntEnv("TASK_TIMEOUT", 7200),
+		TaskTimeout: GetIntEnv("TASK_TIMEOUT", 7200),
 	}
 }
