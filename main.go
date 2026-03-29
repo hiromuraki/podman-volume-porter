@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"podman-volumes-porter/internal/core"
+	"podman-volume-porter/internal/core"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,7 +19,7 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "pvp",
-	Short: "Podman Volumes Porter - 像搬运工一样管理你的 Podman 卷",
+	Short: "Podman Volume Porter - 像搬运工一样管理你的 Podman 卷",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		setupEngine()
 	},

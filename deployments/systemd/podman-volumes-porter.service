@@ -1,5 +1,5 @@
 [Unit]
-Description=Backup Podman Volumes to S3
+Description=Backup Podman Volume to S3
 After=network-online.target
 
 [Service]
@@ -8,7 +8,7 @@ Type=oneshot
 EnvironmentFile=%h/.env.podman-volume-porter
 
 WorkingDirectory=%h/
-ExecStart=/bin/podman-volumes-porter backup '*'
+ExecStart=/bin/podman-volume-porter backup '*'
 
 Restart=on-failure
 RestartSec=3600

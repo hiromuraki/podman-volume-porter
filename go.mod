@@ -1,4 +1,4 @@
-module podman-volumes-porter
+module podman-volume-porter
 
 go 1.26
 
