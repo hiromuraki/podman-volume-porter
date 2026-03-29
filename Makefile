@@ -1,6 +1,6 @@
 .PHONY: build clean
 
-BINARY_NAME=podman-volumes-porter
+BINARY_NAME=podman-volume-porter
 
 build:
 	@echo "正在编译静态文件..."
