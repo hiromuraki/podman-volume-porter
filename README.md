@@ -7,7 +7,6 @@
 * 🚀 **全流式处理 (Zero-Disk-Footprint)**：备份和恢复过程完全在内存管道中进行（Podman -> Tar Stream -> Zstd -> S3），不需要占用宿主机额外的磁盘空间；上传按 64 MiB 分片、并发 3，内存峰值约 256 MiB，单个备份对象上限约 625 GiB。
 * ☁️ **原生 S3 兼容**：完美兼容标准的 S3 API，通过简单的环境变量即可接入任何对象存储。
 * 🎯 **智能通配符匹配**：支持 Shell 风格的通配符（如 `podman-volume-porter backup *-data`），一键批量备份多个业务卷。
-* 📅 **自动分级标记**：无需数据库记录，程序会自动根据当前时间戳判定备份性质，自动打上 `daily`、`weekly`（每周一）或 `monthly`（每月1号）的标签。
 * 🛡️ **安全演练模式**：内置 `--dry-run` 选项，让你在执行真实的破坏性写入或上传前，随时预览即将发生的操作。
 * 🪶 **极简部署**：编译后为单一静态二进制文件，无任何系统动态库依赖，开箱即用。
 
@@ -76,7 +75,7 @@ podman-volume-porter backup "*-data" --dry-run
 podman-volume-porter backup db-data --allow-override
 ```
 
-*💡 提示：备份后的文件在 S3 中会自动命名为 `<卷名>/<时间戳>_<类型>.tar.zstd`，如 `mysql-data/20260309T152027Z_weekly.tar.zstd`。时间戳为 UTC，`daily`/`weekly`/`monthly` 类型按本地时区判定。*
+*💡 提示：备份后的文件在 S3 中会自动命名为 `<卷名>/<时间戳>.tar.zstd`，如 `mysql-data/20260309T152027Z.tar.zstd`。时间戳为 UTC；旧版本带 `_daily`/`_weekly`/`_monthly` 后缀的对象仍可列出和恢复。*
 
 ### 2. 恢复卷 (Restore)
 
@@ -87,13 +86,13 @@ podman-volume-porter backup db-data --allow-override
 podman-volume-porter restore mysql-data
 
 # 恢复到指定的备份对象（对象名可用 list 命令查看）
-podman-volume-porter restore mysql-data --from 20260309T152027Z_weekly.tar.zstd
+podman-volume-porter restore mysql-data --from 20260309T152027Z.tar.zstd
 
 # 演练模式：查找匹配的文件，但不执行实际的覆盖
 podman-volume-porter restore mysql-data --dry-run
 ```
 
-*`--from` 只接受完整的备份对象名（如 `20260309T152027Z_weekly.tar.zstd`），不支持日期前缀；不填则取最新一份。*
+*`--from` 只接受完整的备份对象名（如 `20260309T152027Z.tar.zstd`），不支持日期前缀；不填则取最新一份。*
 
 *⚠️ 提示：恢复只恢复卷数据，不恢复卷的 driver/options/labels 配置；目标卷已存在时会先导入临时卷，成功后再替换旧卷，执行前请确认目标卷已停止写入。*
 
@@ -107,8 +106,8 @@ podman-volume-porter list mysql-data
 
 ```text
 [INFO] 卷 mysql-data 共有 2 份备份：
-[INFO]   2026-03-09 23:20:27     1.2 GiB  20260309T152027Z_weekly.tar.zstd
-[INFO]   2026-03-08 12:00:12   980.0 MiB  20260308T040012Z_daily.tar.zstd
+[INFO]   2026-03-09 23:20:27     1.2 GiB  20260309T152027Z.tar.zstd
+[INFO]   2026-03-08 12:00:12   980.0 MiB  20260308T040012Z.tar.zstd
 ```
 
 ## 🤖 自动化建议 (Systemd Timer)

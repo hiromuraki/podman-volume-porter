@@ -152,40 +152,15 @@ func TestGetBackupKey(t *testing.T) {
 		wantKey string
 	}{
 		{
-			name: "每月1号 - 月度备份",
-			// 2026-03-01 是周日
-			now:     time.Date(2026, 3, 1, 10, 30, 0, 0, time.UTC),
-			wantKey: "seaweed-config/20260301T103000Z_monthly.tar.zstd",
+			name:    "UTC 时间",
+			now:     time.Date(2026, 3, 9, 15, 20, 27, 0, time.UTC),
+			wantKey: "seaweed-config/20260309T152027Z.tar.zstd",
 		},
 		{
-			name: "周一但不是1号 - 周备份",
-			// 2026-03-02 是周一
-			now:     time.Date(2026, 3, 2, 10, 30, 0, 0, time.UTC),
-			wantKey: "seaweed-config/20260302T103000Z_weekly.tar.zstd",
-		},
-		{
-			name: "普通日期 - 日常备份",
-			// 2026-03-03 是周二
-			now:     time.Date(2026, 3, 3, 10, 30, 0, 0, time.UTC),
-			wantKey: "seaweed-config/20260303T103000Z_daily.tar.zstd",
-		},
-		{
-			name: "本地时区周一凌晨 - 周备份",
-			// 2026-03-02 04:00 +08:00 == 2026-03-01T20:00:00Z
-			now:     time.Date(2026, 3, 2, 4, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-			wantKey: "seaweed-config/20260301T200000Z_weekly.tar.zstd",
-		},
-		{
-			name: "本地时区每月1号凌晨 - 月备份",
+			name: "本地时间转换为 UTC 时间戳",
 			// 2026-03-01 04:00 +08:00 == 2026-02-28T20:00:00Z
 			now:     time.Date(2026, 3, 1, 4, 0, 0, 0, time.FixedZone("CST", 8*3600)),
-			wantKey: "seaweed-config/20260228T200000Z_monthly.tar.zstd",
-		},
-		{
-			name: "边界：1号正好是周一 - 优先月度备份",
-			// 2026-06-01 是周一
-			now:     time.Date(2026, 6, 1, 15, 0, 0, 0, time.UTC),
-			wantKey: "seaweed-config/20260601T150000Z_monthly.tar.zstd",
+			wantKey: "seaweed-config/20260228T200000Z.tar.zstd",
 		},
 	}
 

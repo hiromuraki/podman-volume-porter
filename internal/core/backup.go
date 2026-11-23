@@ -13,24 +13,11 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-// getBackupKey 按 now 所在时区判定备份类型（月/周/日），时间戳统一以 UTC 记录。
+// getBackupKey 生成备份对象键：<卷名>/<UTC 时间戳>.tar.zstd。
 func getBackupKey(volumeName string, now time.Time) string {
-	var backupType string
-
-	// 每月 1 号的备份视为月备份
-	// 每周一的备份视为周备份
-	// 默认是日常备份
-	if now.Day() == 1 {
-		backupType = "monthly"
-	} else if now.Weekday() == time.Monday {
-		backupType = "weekly"
-	} else {
-		backupType = "daily"
-	}
-
 	timestamp := now.UTC().Format("20060102T150405Z")
 
-	return fmt.Sprintf("%s/%s_%s.tar.zstd", volumeName, timestamp, backupType)
+	return fmt.Sprintf("%s/%s.tar.zstd", volumeName, timestamp)
 }
 
 // filterVolumeNames 先匹配任一包含模式，再剔除命中任一排除模式的卷。

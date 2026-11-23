@@ -8,15 +8,15 @@ import (
 
 func TestFilterBackupObjects(t *testing.T) {
 	objects := []ObjectInfo{
-		{Key: "vol/20260310T083907Z_daily.tar.zstd"},
+		{Key: "vol/20260310T083907Z.tar.zstd"},
 		{Key: "vol/20260309T152031Z_weekly.tar.zstd"},
-		{Key: "other/20260310T083907Z_daily.tar.zstd"},
+		{Key: "other/20260310T083907Z.tar.zstd"},
 		{Key: "vol/20260310T08390Z_daily.tar.zstd"},
-		{Key: "vol/20260308T101010Z_daily.tar.gz"},
+		{Key: "vol/20260308T101010Z.tar.gz"},
 		{Key: "vol/README.md"},
 	}
 	want := []ObjectInfo{
-		{Key: "vol/20260310T083907Z_daily.tar.zstd"},
+		{Key: "vol/20260310T083907Z.tar.zstd"},
 		{Key: "vol/20260309T152031Z_weekly.tar.zstd"},
 	}
 
@@ -25,7 +25,6 @@ func TestFilterBackupObjects(t *testing.T) {
 		t.Errorf("filterBackupObjects() = %v, want %v", got, want)
 	}
 }
-
 func TestSortBackupObjects(t *testing.T) {
 	objects := []ObjectInfo{
 		{Key: "vol/20260301T100000Z_daily.tar.zstd"},
