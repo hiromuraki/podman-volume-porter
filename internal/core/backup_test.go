@@ -1,12 +1,14 @@
 package core
 
 import (
+	"context"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestGetVolumeNames(t *testing.T) {
+func TestFilterVolumeNames(t *testing.T) {
 	// 准备模拟的卷名数据
 	allVolumes := []string{
 		"seaweed-config",
@@ -17,11 +19,13 @@ func TestGetVolumeNames(t *testing.T) {
 		"test",
 	}
 
-	// 定义测试用例表格
 	tests := []struct {
-		name        string   // 测试用例描述
-		pattern     string   // 输入的匹配模式
-		wantMatched []string // 期望得到的结果
+		name         string   // 测试用例描述
+		pattern      string   // 输入的匹配模式
+		excludes     []string // 排除模式
+		wantMatched  []string // 期望得到的结果
+		wantExcluded []string // 期望被排除的卷
+		wantErr      bool
 	}{
 		{
 			name:        "全匹配通配符",
@@ -58,14 +62,72 @@ func TestGetVolumeNames(t *testing.T) {
 			pattern:     "tes?",
 			wantMatched: []string{"test"},
 		},
+		{
+			name:     "排除后缀",
+			pattern:  "*",
+			excludes: []string{"*-cache"},
+			wantMatched: []string{
+				"seaweed-config",
+				"seaweed-data",
+				"vaultwarden-vol",
+				"mysql-db",
+				"test",
+			},
+			wantExcluded: []string{"redis-cache"},
+		},
+		{
+			name:     "多个排除模式",
+			pattern:  "*",
+			excludes: []string{"*-cache", "test"},
+			wantMatched: []string{
+				"seaweed-config",
+				"seaweed-data",
+				"vaultwarden-vol",
+				"mysql-db",
+			},
+			wantExcluded: []string{"redis-cache", "test"},
+		},
+		{
+			name:         "排除后为空",
+			pattern:      "*-data",
+			excludes:     []string{"seaweed-*"},
+			wantMatched:  []string{},
+			wantExcluded: []string{"seaweed-data"},
+		},
+		{
+			name:        "排除模式不命中",
+			pattern:     "test",
+			excludes:    []string{"nginx*"},
+			wantMatched: []string{"test"},
+		},
+		{
+			name:    "匹配模式语法错误",
+			pattern: "[",
+			wantErr: true,
+		},
+		{
+			name:     "排除模式语法错误",
+			pattern:  "*",
+			excludes: []string{"["},
+			wantErr:  true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := filterVolumeNames(allVolumes, tt.pattern)
+			gotMatched, gotExcluded, err := filterVolumeNames(allVolumes, tt.pattern, tt.excludes)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("filterVolumeNames() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
 
-			if !reflect.DeepEqual(got, tt.wantMatched) {
-				t.Errorf("getVolumeNames() got = %v, want %v", got, tt.wantMatched)
+			if !reflect.DeepEqual(gotMatched, tt.wantMatched) {
+				t.Errorf("filterVolumeNames() matched = %v, want %v", gotMatched, tt.wantMatched)
+			}
+			if !reflect.DeepEqual(gotExcluded, tt.wantExcluded) {
+				t.Errorf("filterVolumeNames() excluded = %v, want %v", gotExcluded, tt.wantExcluded)
 			}
 		})
 	}
@@ -125,5 +187,60 @@ func TestGetBackupKey(t *testing.T) {
 				t.Errorf("getBackupKey() = %v, want %v", got, tt.wantKey)
 			}
 		})
+	}
+}
+
+type recordingLogger struct {
+	infos     []string
+	successes []string
+	warnings  []string
+	errors    []string
+}
+
+func (l *recordingLogger) Info(message string)    { l.infos = append(l.infos, message) }
+func (l *recordingLogger) Success(message string) { l.successes = append(l.successes, message) }
+func (l *recordingLogger) Warning(message string) { l.warnings = append(l.warnings, message) }
+func (l *recordingLogger) Error(message string)   { l.errors = append(l.errors, message) }
+
+func TestBackupActionDryRun(t *testing.T) {
+	withFakePodman(t, `#!/bin/sh
+echo app-data
+echo app-cache
+echo tmp-cache
+`)
+
+	logger := &recordingLogger{}
+	engine := Engine{Logger: logger}
+
+	if err := engine.BackupAction(context.Background(), "app-*", []string{"*-cache"}, false, true); err != nil {
+		t.Fatalf("BackupAction() error = %v", err)
+	}
+
+	joined := strings.Join(logger.infos, "\n")
+	if !strings.Contains(joined, "匹配到 1 个卷") {
+		t.Errorf("dry-run 输出缺少数量: %v", logger.infos)
+	}
+	if !strings.Contains(joined, "app-data") {
+		t.Errorf("dry-run 输出缺少卷名: %v", logger.infos)
+	}
+	if strings.Contains(joined, "app-cache") || strings.Contains(joined, "tmp-cache") {
+		t.Errorf("dry-run 输出包含被排除的卷: %v", logger.infos)
+	}
+	if len(logger.successes) != 0 {
+		t.Errorf("dry-run 不应执行备份: %v", logger.successes)
+	}
+}
+
+func TestBackupActionAllExcluded(t *testing.T) {
+	withFakePodman(t, `#!/bin/sh
+echo app-data
+echo app-cache
+`)
+
+	engine := Engine{Logger: &recordingLogger{}}
+
+	err := engine.BackupAction(context.Background(), "app-*", []string{"*"}, false, true)
+	if err == nil || !strings.Contains(err.Error(), "均被 --exclude 排除") {
+		t.Fatalf("BackupAction() error = %v, 期望提示全部被排除", err)
 	}
 }

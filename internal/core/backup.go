@@ -7,6 +7,7 @@ import (
 	"io"
 	"os/exec"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
@@ -32,19 +33,41 @@ func getBackupKey(volumeName string, now time.Time) string {
 	return fmt.Sprintf("%s/%s_%s.tar.zstd", volumeName, timestamp, backupType)
 }
 
-func filterVolumeNames(allVolumeNames []string, namePattern string) []string {
-	if len(allVolumeNames) == 0 {
-		return []string{}
+// filterVolumeNames 先按 namePattern 匹配卷名，再剔除命中任一排除模式的卷。
+func filterVolumeNames(allVolumeNames []string, namePattern string, excludePatterns []string) (matched []string, excluded []string, err error) {
+	if _, err := path.Match(namePattern, ""); err != nil {
+		return nil, nil, fmt.Errorf("卷名匹配模式 %q 无效: %w", namePattern, err)
 	}
-
-	matched := make([]string, 0)
-	for _, vol := range allVolumeNames {
-		isMatch, err := path.Match(namePattern, vol)
-		if err == nil && isMatch {
-			matched = append(matched, vol)
+	for _, pattern := range excludePatterns {
+		if _, err := path.Match(pattern, ""); err != nil {
+			return nil, nil, fmt.Errorf("排除模式 %q 无效: %w", pattern, err)
 		}
 	}
-	return matched
+
+	matched = make([]string, 0)
+	for _, vol := range allVolumeNames {
+		isMatch, _ := path.Match(namePattern, vol)
+		if !isMatch {
+			continue
+		}
+
+		isExcluded := false
+		for _, pattern := range excludePatterns {
+			if hit, _ := path.Match(pattern, vol); hit {
+				isExcluded = true
+				break
+			}
+		}
+
+		if isExcluded {
+			excluded = append(excluded, vol)
+			continue
+		}
+
+		matched = append(matched, vol)
+	}
+
+	return matched, excluded, nil
 }
 
 func (e Engine) backupVolume(ctx context.Context, volumeName string, allowOverride bool) error {
@@ -97,24 +120,36 @@ func (e Engine) backupVolume(ctx context.Context, volumeName string, allowOverri
 	return e.Storage.UploadStream(ctx, key, pr)
 }
 
-func (e Engine) BackupAction(ctx context.Context, volumeNamePattern string, allowOverride bool, dryRun bool) error {
+func (e Engine) BackupAction(ctx context.Context, volumeNamePattern string, excludePatterns []string, allowOverride bool, dryRun bool) error {
 	allVolumeNames, err := podman.getAllVolumeNames(ctx)
 	if err != nil {
 		return err
 	}
 
-	matchedVolumeNames := filterVolumeNames(allVolumeNames, volumeNamePattern)
+	matchedVolumeNames, excludedVolumeNames, err := filterVolumeNames(allVolumeNames, volumeNamePattern, excludePatterns)
+	if err != nil {
+		return err
+	}
+
 	if len(matchedVolumeNames) == 0 {
+		if len(excludedVolumeNames) > 0 {
+			return fmt.Errorf("匹配到的 %d 个卷均被 --exclude 排除: %s", len(excludedVolumeNames), strings.Join(excludedVolumeNames, ", "))
+		}
 		return fmt.Errorf("未找到匹配的卷: %s", volumeNamePattern)
 	}
 
+	if dryRun {
+		e.Logger.Info(fmt.Sprintf("[DryRun] 匹配到 %d 个卷：", len(matchedVolumeNames)))
+		for _, v := range matchedVolumeNames {
+			e.Logger.Info("  - " + v)
+		}
+		return nil
+	}
+
+	e.Logger.Info(fmt.Sprintf("开始备份 %d 个卷", len(matchedVolumeNames)))
+
 	var errs []error
 	for _, v := range matchedVolumeNames {
-		if dryRun {
-			e.Logger.Info(fmt.Sprintf("[DryRun] 备份卷：%s", v))
-			continue
-		}
-
 		e.Logger.Info(fmt.Sprintf("备份卷：%s", v))
 		if err := e.backupVolume(ctx, v, allowOverride); err != nil {
 			errs = append(errs, fmt.Errorf("卷 %s: %w", v, err))

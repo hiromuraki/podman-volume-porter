@@ -55,7 +55,7 @@ systemd 单元默认从 `%h/.env.podman-volume-porter` 加载上述变量；在 
 
 ### 1. 备份卷 (Backup)
 
-备份单个或多个匹配的卷到 S3 存储。
+备份单个或多个匹配的卷到 S3 存储。卷名支持 Shell 风格通配符，可用 `--exclude` 排除匹配的卷（可重复指定）。
 
 ```bash
 # 备份单个指定的卷
@@ -64,7 +64,10 @@ podman-volume-porter backup seaweed-config
 # 使用通配符批量备份所有以 "-data" 结尾的卷
 podman-volume-porter backup "*-data"
 
-# 演练模式：看看会备份哪些卷，但不实际上传
+# 批量备份并排除缓存类卷
+podman-volume-porter backup "app-*" --exclude "*-cache" --exclude "tmp-*"
+
+# 演练模式：打印将备份的卷清单与数量，但不实际上传
 podman-volume-porter backup "*-data" --dry-run
 
 # 强制覆盖模式：如果远程已存在同名同时间的备份，强行覆盖

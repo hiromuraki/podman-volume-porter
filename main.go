@@ -14,10 +14,11 @@ import (
 var version = "dev"
 
 var (
-	dryRun        bool
-	allowOverride bool
-	restoreFrom   string
-	engine        core.Engine
+	dryRun          bool
+	allowOverride   bool
+	excludePatterns []string
+	restoreFrom     string
+	engine          core.Engine
 )
 
 var rootCmd = &cobra.Command{
@@ -38,7 +39,7 @@ var backupCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(core.Config.TaskTimeout)*time.Second)
 		defer cancel()
 
-		return engine.BackupAction(ctx, args[0], allowOverride, dryRun)
+		return engine.BackupAction(ctx, args[0], excludePatterns, allowOverride, dryRun)
 	},
 }
 
@@ -60,6 +61,7 @@ func init() {
 
 	// 子命令特有 Flag
 	backupCmd.Flags().BoolVar(&allowOverride, "allow-override", false, "备份数据存在时是否强制覆盖")
+	backupCmd.Flags().StringArrayVar(&excludePatterns, "exclude", nil, "排除匹配的卷名模式，可重复指定")
 	restoreCmd.Flags().StringVar(&restoreFrom, "from", "", "指定恢复的备份前缀 (例如: 20260309)")
 
 	rootCmd.AddCommand(backupCmd)
