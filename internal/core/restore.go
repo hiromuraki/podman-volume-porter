@@ -12,11 +12,10 @@ import (
 )
 
 // backupObjectNameRe 匹配备份对象名（不含卷名目录前缀）。
-// 旧版对象名带 _daily/_weekly/_monthly 后缀，这里保持兼容读取。
-var backupObjectNameRe = regexp.MustCompile(`^\d{8}T\d{6}Z(?:_[A-Za-z0-9_-]+)?\.tar\.zstd$`)
+var backupObjectNameRe = regexp.MustCompile(`^\d{8}T\d{6}Z\.tar\.zstd$`)
 
 func backupKeyRe(volumeName string) *regexp.Regexp {
-	return regexp.MustCompile(fmt.Sprintf(`^%s/\d{8}T\d{6}Z(?:_[A-Za-z0-9_-]+)?\.tar\.zstd$`, regexp.QuoteMeta(volumeName)))
+	return regexp.MustCompile(fmt.Sprintf(`^%s/\d{8}T\d{6}Z\.tar\.zstd$`, regexp.QuoteMeta(volumeName)))
 }
 
 func filterBackupObjects(objects []ObjectInfo, volumeName string) []ObjectInfo {

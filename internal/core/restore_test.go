@@ -11,13 +11,12 @@ func TestFilterBackupObjects(t *testing.T) {
 		{Key: "vol/20260310T083907Z.tar.zstd"},
 		{Key: "vol/20260309T152031Z_weekly.tar.zstd"},
 		{Key: "other/20260310T083907Z.tar.zstd"},
-		{Key: "vol/20260310T08390Z_daily.tar.zstd"},
+		{Key: "vol/20260310T08390Z.tar.zstd"},
 		{Key: "vol/20260308T101010Z.tar.gz"},
 		{Key: "vol/README.md"},
 	}
 	want := []ObjectInfo{
 		{Key: "vol/20260310T083907Z.tar.zstd"},
-		{Key: "vol/20260309T152031Z_weekly.tar.zstd"},
 	}
 
 	got := filterBackupObjects(objects, "vol")
@@ -51,8 +50,9 @@ func TestFindBestMatchedKeyRejectsInvalidObjectName(t *testing.T) {
 	invalid := []string{
 		"202603",
 		"20260301",
-		"vol-a/20260309T152027Z_daily.tar.zstd",
-		"20260309T152027Z_daily.tar.gz",
+		"vol-a/20260309T152027Z.tar.zstd",
+		"20260309T152027Z_daily.tar.zstd",
+		"20260309T152027Z.tar.gz",
 	}
 
 	for _, name := range invalid {

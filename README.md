@@ -75,7 +75,7 @@ podman-volume-porter backup "*-data" --dry-run
 podman-volume-porter backup db-data --allow-override
 ```
 
-*💡 提示：备份后的文件在 S3 中会自动命名为 `<卷名>/<时间戳>.tar.zstd`，如 `mysql-data/20260309T152027Z.tar.zstd`。时间戳为 UTC；旧版本带 `_daily`/`_weekly`/`_monthly` 后缀的对象仍可列出和恢复。*
+*💡 提示：备份后的文件在 S3 中会自动命名为 `<卷名>/<时间戳>.tar.zstd`，如 `mysql-data/20260309T152027Z.tar.zstd`（时间戳为 UTC）。*
 
 ### 2. 恢复卷 (Restore)
 

@@ -147,7 +147,7 @@ func findExactCall(calls []string, want string) int {
 }
 
 func TestRestoreReplacesOldVolumeAfterSurvivingImport(t *testing.T) {
-	key := "vol/20260228T200000Z_monthly.tar.zstd"
+	key := "vol/20260228T200000Z.tar.zstd"
 	payload := backupPayload(t)
 	server := newFakeS3(t, key, payload)
 	defer server.Close()
@@ -174,7 +174,7 @@ func TestRestoreReplacesOldVolumeAfterSurvivingImport(t *testing.T) {
 }
 
 func TestListAction(t *testing.T) {
-	key := "vol/20260228T200000Z_monthly.tar.zstd"
+	key := "vol/20260228T200000Z.tar.zstd"
 	server := newFakeS3(t, key, backupPayload(t))
 	defer server.Close()
 
@@ -199,13 +199,13 @@ func TestListAction(t *testing.T) {
 	if !strings.Contains(joined, "共有 1 份备份") {
 		t.Errorf("ListAction() 输出缺少数量: %v", logger.infos)
 	}
-	if !strings.Contains(joined, "20260228T200000Z_monthly.tar.zstd") {
+	if !strings.Contains(joined, "20260228T200000Z.tar.zstd") {
 		t.Errorf("ListAction() 输出缺少对象名: %v", logger.infos)
 	}
 }
 
 func TestRestoreWithExplicitObjectName(t *testing.T) {
-	key := "vol/20260228T200000Z_monthly.tar.zstd"
+	key := "vol/20260228T200000Z.tar.zstd"
 	payload := backupPayload(t)
 	server := newFakeS3(t, key, payload)
 	defer server.Close()
@@ -213,7 +213,7 @@ func TestRestoreWithExplicitObjectName(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "podman.log")
 	engine := newRestoreEngine(t, server.URL, logPath)
 
-	if err := engine.RestoreAction(context.Background(), "vol", "20260228T200000Z_monthly.tar.zstd", false); err != nil {
+	if err := engine.RestoreAction(context.Background(), "vol", "20260228T200000Z.tar.zstd", false); err != nil {
 		t.Fatalf("RestoreAction() error = %v", err)
 	}
 
@@ -224,7 +224,7 @@ func TestRestoreWithExplicitObjectName(t *testing.T) {
 }
 
 func TestRestoreKeepsOldVolumeWhenImportFails(t *testing.T) {
-	key := "vol/20260228T200000Z_monthly.tar.zstd"
+	key := "vol/20260228T200000Z.tar.zstd"
 	payload := backupPayload(t)
 	server := newFakeS3(t, key, payload)
 	defer server.Close()
