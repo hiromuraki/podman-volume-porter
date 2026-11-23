@@ -4,185 +4,61 @@ import (
 	"context"
 	"reflect"
 	"testing"
-	"time"
 )
 
-func TestFilterObjectKeys(t *testing.T) {
-	tests := []struct {
-		name       string
-		volumeName string
-		objKeys    []string
-		want       []string
-	}{
-		{
-			name:       "常规混合数据过滤",
-			volumeName: "seaweed-config",
-			objKeys: []string{
-				"seaweed-config/20260310T083907Z_daily.tar.zstd",  // ✅ 完美匹配
-				"seaweed-config/20260309T152031Z_weekly.tar.zstd", // ✅ 完美匹配
-				"other-volume/20260310T083907Z_daily.tar.zstd",    // ❌ 不同的 volume
-				"seaweed-config/20260310T08390Z_daily.tar.zstd",   // ❌ 错误的时间格式 (少一位)
-				"seaweed-config/20260308T101010Z_daily.tar.gz",    // ❌ 错误的后缀 (由于你移除了 gz 兼容，这里会被干掉)
-			},
-			want: []string{
-				"seaweed-config/20260310T083907Z_daily.tar.zstd",
-				"seaweed-config/20260309T152031Z_weekly.tar.zstd",
-			},
-		},
-		{
-			name:       "卷名包含正则特殊字符",
-			volumeName: "db.data*prod",
-			objKeys: []string{
-				"db.data*prod/20260310T083907Z_daily.tar.zstd", // ✅ 匹配
-				"dbXdataYprod/20260310T083907Z_daily.tar.zstd", // ❌ 确保 QuoteMeta 兜底了，而不是被当成正则通配符
-			},
-			want: []string{
-				"db.data*prod/20260310T083907Z_daily.tar.zstd",
-			},
-		},
-		{
-			name:       "空输入与全不匹配",
-			volumeName: "test-vol",
-			objKeys:    []string{"nginx/readme.md"},
-			want:       nil, // 在 Go 中，未初始化的切片值为 nil
-		},
+func TestFilterBackupObjects(t *testing.T) {
+	objects := []ObjectInfo{
+		{Key: "vol/20260310T083907Z_daily.tar.zstd"},
+		{Key: "vol/20260309T152031Z_weekly.tar.zstd"},
+		{Key: "other/20260310T083907Z_daily.tar.zstd"},
+		{Key: "vol/20260310T08390Z_daily.tar.zstd"},
+		{Key: "vol/20260308T101010Z_daily.tar.gz"},
+		{Key: "vol/README.md"},
+	}
+	want := []ObjectInfo{
+		{Key: "vol/20260310T083907Z_daily.tar.zstd"},
+		{Key: "vol/20260309T152031Z_weekly.tar.zstd"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := filterObjectKeys(tt.objKeys, tt.volumeName)
-
-			// Go 的 reflect.DeepEqual 对 nil 和 []string{} 是敏感的。
-			// 为了防止你以后在代码里改成 return []string{} 导致测试报错，这里加个小容错：
-			if len(got) == 0 && len(tt.want) == 0 {
-				return
-			}
-
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("filterObjectKeys() = %v, want %v", got, tt.want)
-			}
-		})
+	got := filterBackupObjects(objects, "vol")
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("filterBackupObjects() = %v, want %v", got, want)
 	}
 }
 
-func TestSortObjectKeys(t *testing.T) {
-	tests := []struct {
-		name    string
-		objKeys []string
-		want    []string
-	}{
-		{
-			name: "乱序时间戳排序 (降序：最新在前)",
-			objKeys: []string{
-				"seaweed/20260301T100000Z_daily.tar.zstd",  // 最老
-				"seaweed/20260310T100000Z_daily.tar.zstd",  // 最新
-				"seaweed/20260305T100000Z_weekly.tar.zstd", // 中间
-			},
-			want: []string{
-				"seaweed/20260310T100000Z_daily.tar.zstd",
-				"seaweed/20260305T100000Z_weekly.tar.zstd",
-				"seaweed/20260301T100000Z_daily.tar.zstd",
-			},
-		},
-		{
-			name: "包含异常数据 (不含时间戳的文件会沉底)",
-			objKeys: []string{
-				"seaweed/20260301T100000Z_daily.tar.zstd",
-				"seaweed/README.md", // 无效数据
-				"seaweed/20260310T100000Z_daily.tar.zstd",
-			},
-			want: []string{
-				"seaweed/20260310T100000Z_daily.tar.zstd",
-				"seaweed/20260301T100000Z_daily.tar.zstd",
-				"seaweed/README.md",
-				// 💡 原理：正则 FindString 找不到时会返回空字符串 ""。
-				// 在 Go 的字符串比较中，"" < "20260310..."，所以有效日期排在前面，空字符串沉到最后。
-			},
-		},
+func TestSortBackupObjects(t *testing.T) {
+	objects := []ObjectInfo{
+		{Key: "vol/20260301T100000Z_daily.tar.zstd"},
+		{Key: "vol/20260310T100000Z_daily.tar.zstd"},
+		{Key: "vol/20260305T100000Z_weekly.tar.zstd"},
+	}
+	want := []string{
+		"vol/20260310T100000Z_daily.tar.zstd",
+		"vol/20260305T100000Z_weekly.tar.zstd",
+		"vol/20260301T100000Z_daily.tar.zstd",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// 因为 sortObjectKeys 是原址(in-place)修改数据
-			// 我们直接复制一份供比较，防止污染原始用例定义（尽管这里影响不大）
-			inputKeys := make([]string, len(tt.objKeys))
-			copy(inputKeys, tt.objKeys)
-
-			sortObjectKeys(inputKeys)
-
-			if !reflect.DeepEqual(inputKeys, tt.want) {
-				t.Errorf("sortObjectKeys() = \n%v\nwant \n%v", inputKeys, tt.want)
-			}
-		})
+	sortBackupObjects(objects)
+	for i, obj := range objects {
+		if obj.Key != want[i] {
+			t.Errorf("sortBackupObjects()[%d] = %q, want %q", i, obj.Key, want[i])
+		}
 	}
 }
 
-func TestFindBestMatchedKeyRejectsForeignKey(t *testing.T) {
+func TestFindBestMatchedKeyRejectsInvalidObjectName(t *testing.T) {
 	engine := Engine{}
 
-	if _, err := engine.findBestMatchedKey(context.Background(), "vol-a", "vol-b/20260309T152027Z_daily.tar.zstd"); err == nil {
-		t.Error("期望拒绝属于其他卷的完整对象键")
+	invalid := []string{
+		"202603",
+		"20260301",
+		"vol-a/20260309T152027Z_daily.tar.zstd",
+		"20260309T152027Z_daily.tar.gz",
 	}
 
-	got, err := engine.findBestMatchedKey(context.Background(), "vol-a", "vol-a/20260309T152027Z_daily.tar.zstd")
-	if err != nil {
-		t.Fatalf("findBestMatchedKey() error = %v", err)
-	}
-	if want := "vol-a/20260309T152027Z_daily.tar.zstd"; got != want {
-		t.Errorf("findBestMatchedKey() = %q, want %q", got, want)
-	}
-}
-
-func TestLocalTimestamp(t *testing.T) {
-	shanghai := time.FixedZone("CST", 8*3600)
-
-	tests := []struct {
-		name string
-		key  string
-		want string
-		ok   bool
-	}{
-		{name: "UTC 前一日换算为本地次日", key: "vol/20260228T200000Z_monthly.tar.zstd", want: "20260301T040000", ok: true},
-		{name: "缺少时间戳", key: "vol/README.md", want: "", ok: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, ok := localTimestamp(tt.key, shanghai)
-			if ok != tt.ok || got != tt.want {
-				t.Errorf("localTimestamp() = (%q, %v), want (%q, %v)", got, ok, tt.want, tt.ok)
-			}
-		})
-	}
-}
-
-func TestSelectKeyByLocalPrefix(t *testing.T) {
-	shanghai := time.FixedZone("CST", 8*3600)
-	// 已按 UTC 时间倒序排列
-	sortedKeys := []string{
-		"vol/20260302T200000Z_daily.tar.zstd",   // 本地 20260303T040000
-		"vol/20260301T200000Z_daily.tar.zstd",   // 本地 20260302T040000
-		"vol/20260228T200000Z_monthly.tar.zstd", // 本地 20260301T040000
-	}
-
-	tests := []struct {
-		name   string
-		prefix string
-		want   string
-		ok     bool
-	}{
-		{name: "按本地月份取最新", prefix: "202603", want: sortedKeys[0], ok: true},
-		{name: "按本地日期匹配", prefix: "20260302", want: sortedKeys[1], ok: true},
-		{name: "按本地时刻匹配", prefix: "20260301T04", want: sortedKeys[2], ok: true},
-		{name: "无匹配", prefix: "202604", ok: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, ok := selectKeyByLocalPrefix(sortedKeys, tt.prefix, shanghai)
-			if ok != tt.ok || got != tt.want {
-				t.Errorf("selectKeyByLocalPrefix() = (%q, %v), want (%q, %v)", got, ok, tt.want, tt.ok)
-			}
-		})
+	for _, name := range invalid {
+		if _, err := engine.findBestMatchedKey(context.Background(), "vol", name); err == nil {
+			t.Errorf("findBestMatchedKey(%q) 期望报错，实际通过", name)
+		}
 	}
 }

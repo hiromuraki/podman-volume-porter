@@ -56,6 +56,18 @@ var backupCmd = &cobra.Command{
 	},
 }
 
+var listCmd = &cobra.Command{
+	Use:   "list <volume_name>",
+	Short: "列出指定卷在 S3 上的备份",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(core.Config.TaskTimeout)*time.Second)
+		defer cancel()
+
+		return engine.ListAction(ctx, args[0])
+	},
+}
+
 var restoreCmd = &cobra.Command{
 	Use:   "restore <volume_name>",
 	Short: "从 S3 恢复指定的 Podman 卷",
@@ -76,10 +88,11 @@ func init() {
 	backupCmd.Flags().BoolVar(&allowOverride, "allow-override", false, "备份数据存在时是否强制覆盖")
 	backupCmd.Flags().StringArrayVar(&includePatterns, "include", nil, "包含匹配的卷名模式，可重复指定并与位置参数取并集")
 	backupCmd.Flags().StringArrayVar(&excludePatterns, "exclude", nil, "排除匹配的卷名模式，可重复指定，优先于包含模式")
-	restoreCmd.Flags().StringVar(&restoreFrom, "from", "", "指定恢复的备份前缀 (例如: 20260309)")
+	restoreCmd.Flags().StringVar(&restoreFrom, "from", "", "指定恢复的完整备份对象名 (例如: 20260309T152027Z_weekly.tar.zstd)")
 
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
+	rootCmd.AddCommand(listCmd)
 }
 
 // preflightTimeout 是启动时 S3 连通性预检的超时，避免端点无响应时无限阻塞。

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -62,13 +63,20 @@ func (s *S3Storage) IsAvailable(ctx context.Context) (bool, error) {
 	return err == nil, err
 }
 
-func (s *S3Storage) ListObjectKeysWithPrefix(ctx context.Context, prefix string) ([]string, error) {
+// ObjectInfo 描述 S3 上的一个对象。
+type ObjectInfo struct {
+	Key          string
+	Size         int64
+	LastModified time.Time
+}
+
+func (s *S3Storage) ListObjects(ctx context.Context, prefix string) ([]ObjectInfo, error) {
 	s3Client, err := s.getS3Client(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var objectKeys []string
+	var objects []ObjectInfo
 
 	paginator := s3.NewListObjectsV2Paginator(s3Client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(s.BucketName),
@@ -82,14 +90,22 @@ func (s *S3Storage) ListObjectKeysWithPrefix(ctx context.Context, prefix string)
 		}
 
 		for _, obj := range page.Contents {
-			if obj.Key != nil {
-				objectKeys = append(objectKeys, *obj.Key)
+			if obj.Key == nil {
+				continue
 			}
+
+			info := ObjectInfo{Key: *obj.Key}
+			if obj.Size != nil {
+				info.Size = *obj.Size
+			}
+			if obj.LastModified != nil {
+				info.LastModified = *obj.LastModified
+			}
+			objects = append(objects, info)
 		}
 	}
 
-	return objectKeys, nil
-
+	return objects, nil
 }
 
 func (s *S3Storage) ObjectExists(ctx context.Context, key string) (bool, error) {

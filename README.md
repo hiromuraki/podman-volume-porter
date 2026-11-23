@@ -86,19 +86,30 @@ podman-volume-porter backup db-data --allow-override
 # 自动恢复该卷时间最新的备份
 podman-volume-porter restore mysql-data
 
-# 精准恢复到某月的最新备份（2026年3月）
-podman-volume-porter restore mysql-data --from 202603
-
-# 精准恢复到某天的最新备份（2026年3月1日）
-podman-volume-porter restore mysql-data --from 20260301
+# 恢复到指定的备份对象（对象名可用 list 命令查看）
+podman-volume-porter restore mysql-data --from 20260309T152027Z_weekly.tar.zstd
 
 # 演练模式：查找匹配的文件，但不执行实际的覆盖
 podman-volume-porter restore mysql-data --dry-run
 ```
 
-*`--from` 按本地日期/时间前缀匹配（如 `202603`、`20260301`），也可以传完整对象键（须属于该卷）。*
+*`--from` 只接受完整的备份对象名（如 `20260309T152027Z_weekly.tar.zstd`），不支持日期前缀；不填则取最新一份。*
 
 *⚠️ 提示：恢复只恢复卷数据，不恢复卷的 driver/options/labels 配置；目标卷已存在时会先导入临时卷，成功后再替换旧卷，执行前请确认目标卷已停止写入。*
+
+### 3. 查看备份 (List)
+
+列出指定卷在 S3 上的全部备份，按时间倒序：
+
+```bash
+podman-volume-porter list mysql-data
+```
+
+```text
+[INFO] 卷 mysql-data 共有 2 份备份：
+[INFO]   2026-03-09 23:20:27     1.2 GiB  20260309T152027Z_weekly.tar.zstd
+[INFO]   2026-03-08 12:00:12   980.0 MiB  20260308T040012Z_daily.tar.zstd
+```
 
 ## 🤖 自动化建议 (Systemd Timer)
 

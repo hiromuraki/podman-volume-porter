@@ -6,95 +6,69 @@ import (
 	"io"
 	"regexp"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
 )
 
-var backupTimestampRe = regexp.MustCompile(`(\d{8}T\d{6})Z`)
+// backupObjectNameRe 匹配备份对象名（不含卷名目录前缀）。
+var backupObjectNameRe = regexp.MustCompile(`^\d{8}T\d{6}Z_[A-Za-z0-9_-]+\.tar\.zstd$`)
 
-func filterObjectKeys(objKeys []string, volumeName string) []string {
-	var filteredKeys []string
+func backupKeyRe(volumeName string) *regexp.Regexp {
+	return regexp.MustCompile(fmt.Sprintf(`^%s/\d{8}T\d{6}Z_[A-Za-z0-9_-]+\.tar\.zstd$`, regexp.QuoteMeta(volumeName)))
+}
 
-	pattern := fmt.Sprintf(`^%s/\d{8}T\d{6}Z.*\.tar\.zstd$`, regexp.QuoteMeta(volumeName))
-	filterRe := regexp.MustCompile(pattern)
-	for _, key := range objKeys {
-		if filterRe.MatchString(key) {
-			filteredKeys = append(filteredKeys, key)
+func filterBackupObjects(objects []ObjectInfo, volumeName string) []ObjectInfo {
+	re := backupKeyRe(volumeName)
+
+	filtered := make([]ObjectInfo, 0, len(objects))
+	for _, obj := range objects {
+		if re.MatchString(obj.Key) {
+			filtered = append(filtered, obj)
 		}
 	}
 
-	return filteredKeys
+	return filtered
 }
 
-func sortObjectKeys(objKeys []string) {
-	sort.Slice(objKeys, func(i, j int) bool {
-		return backupTimestampRe.FindString(objKeys[i]) > backupTimestampRe.FindString(objKeys[j])
+func sortBackupObjects(objects []ObjectInfo) {
+	sort.Slice(objects, func(i, j int) bool {
+		return objects[i].Key > objects[j].Key
 	})
 }
 
-// localTimestamp 把键中的 UTC 时间戳转换到 loc 时区的紧凑格式，用于按本地日期匹配。
-func localTimestamp(key string, loc *time.Location) (string, bool) {
-	match := backupTimestampRe.FindStringSubmatch(key)
-	if match == nil {
-		return "", false
-	}
-
-	ts, err := time.ParseInLocation("20060102T150405", match[1], time.UTC)
-	if err != nil {
-		return "", false
-	}
-
-	return ts.In(loc).Format("20060102T150405"), true
-}
-
-// selectKeyByLocalPrefix 从已按时间倒序的键中选出本地时间前缀匹配的最新一项。
-func selectKeyByLocalPrefix(sortedKeys []string, prefix string, loc *time.Location) (string, bool) {
-	for _, key := range sortedKeys {
-		local, ok := localTimestamp(key, loc)
-		if ok && strings.HasPrefix(local, prefix) {
-			return key, true
+func (e Engine) findBestMatchedKey(ctx context.Context, volumeName string, objectName string) (string, error) {
+	if objectName != "" {
+		if !backupObjectNameRe.MatchString(objectName) {
+			return "", fmt.Errorf("--from 需要完整的备份对象名（如 20260309T152027Z_weekly.tar.zstd）: %s", objectName)
 		}
-	}
 
-	return "", false
-}
-
-func (e Engine) findBestMatchedKey(ctx context.Context, volumeName string, keyPrefix string) (string, error) {
-	// 完整对象键直接使用，但必须属于该卷
-	if strings.HasSuffix(keyPrefix, ".tar.zstd") {
-		if len(filterObjectKeys([]string{keyPrefix}, volumeName)) != 1 {
-			return "", fmt.Errorf("备份文件 %s 不属于卷 %s", keyPrefix, volumeName)
+		key := volumeName + "/" + objectName
+		exists, err := e.Storage.ObjectExists(ctx, key)
+		if err != nil {
+			return "", err
 		}
-		return keyPrefix, nil
+		if !exists {
+			return "", fmt.Errorf("备份对象 s3://%s/%s 不存在", e.Storage.BucketName, key)
+		}
+
+		return key, nil
 	}
 
-	// 列出该卷的全部备份，再按本地日期/时间前缀筛选
-	searchKey := volumeName + "/"
-	objKeys, err := e.Storage.ListObjectKeysWithPrefix(ctx, searchKey)
+	objects, err := e.Storage.ListObjects(ctx, volumeName+"/")
 	if err != nil {
 		return "", err
 	}
 
-	filteredKeys := filterObjectKeys(objKeys, volumeName)
-	if len(filteredKeys) == 0 {
-		return "", fmt.Errorf("在远程仓库中未找到卷 %s 的任何备份 (searchKey=%s)", volumeName, searchKey)
+	filtered := filterBackupObjects(objects, volumeName)
+	if len(filtered) == 0 {
+		return "", fmt.Errorf("在远程仓库中未找到卷 %s 的任何备份", volumeName)
 	}
 
-	sortObjectKeys(filteredKeys)
+	sortBackupObjects(filtered)
+	e.Logger.Warning("未指定备份对象，自动选择最新备份: " + filtered[0].Key)
 
-	if keyPrefix == "" {
-		e.Logger.Warning("未指定备份点，自动选择最新备份: " + filteredKeys[0])
-		return filteredKeys[0], nil
-	}
-
-	key, ok := selectKeyByLocalPrefix(filteredKeys, keyPrefix, time.Local)
-	if !ok {
-		return "", fmt.Errorf("未找到符合本地时间前缀 %s 的备份（--from 按本地时间匹配）", keyPrefix)
-	}
-
-	return key, nil
+	return filtered[0].Key, nil
 }
 
 // getBackupStream 打开备份对象并校验 Zstd 帧头，调用方负责关闭返回的流。
