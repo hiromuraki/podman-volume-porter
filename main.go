@@ -10,6 +10,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version 由构建流程通过 -ldflags "-X main.version=..." 注入。
+var version = "dev"
+
 var (
 	dryRun        bool
 	allowOverride bool
@@ -18,8 +21,10 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "pvp",
-	Short: "Podman Volume Porter - 像搬运工一样管理你的 Podman 卷",
+	Use:          "pvp",
+	Short:        "Podman Volume Porter - 像搬运工一样管理你的 Podman 卷",
+	Version:      version,
+	SilenceUsage: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		setupEngine()
 	},
@@ -29,11 +34,11 @@ var backupCmd = &cobra.Command{
 	Use:   "backup <volumeNamePattern>",
 	Short: "备份指定的 Podman 卷至 S3，支持通配符",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(core.Config.TaskTimeout)*time.Hour)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(core.Config.TaskTimeout)*time.Second)
 		defer cancel()
 
-		engine.BackupAction(ctx, args[0], allowOverride, dryRun)
+		return engine.BackupAction(ctx, args[0], allowOverride, dryRun)
 	},
 }
 
@@ -41,11 +46,11 @@ var restoreCmd = &cobra.Command{
 	Use:   "restore <volume_name>",
 	Short: "从 S3 恢复指定的 Podman 卷",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(core.Config.TaskTimeout)*time.Hour)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(core.Config.TaskTimeout)*time.Second)
 		defer cancel()
 
-		engine.RestoreAction(ctx, args[0], restoreFrom, dryRun)
+		return engine.RestoreAction(ctx, args[0], restoreFrom, dryRun)
 	},
 }
 
@@ -78,14 +83,14 @@ func setupEngine() {
 
 	// 环境检查
 	if engine.Storage.EndpointUrl == "" || engine.Storage.AccessKey == "" || engine.Storage.SecretKey == "" {
-		fmt.Println("❌ 错误: 缺少必要环境变量 (S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_KEY)")
+		fmt.Fprintln(os.Stderr, "❌ 错误: 缺少必要环境变量 (S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_KEY)")
 		os.Exit(1)
 	}
 
 	// 连通性预检
 	isS3Available, err := engine.Storage.IsAvailable(context.Background())
 	if !isS3Available {
-		fmt.Printf("❌ 错误: 无法连接至 S3 存储. %s", err.Error())
+		fmt.Fprintf(os.Stderr, "❌ 错误: 无法连接至 S3 存储. %s\n", err.Error())
 		os.Exit(1)
 	}
 }

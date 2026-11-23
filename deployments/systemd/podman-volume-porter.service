@@ -1,6 +1,8 @@
 [Unit]
 Description=Backup Podman Volume to S3
 After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Service]
 Type=oneshot
@@ -8,9 +10,7 @@ Type=oneshot
 EnvironmentFile=%h/.env.podman-volume-porter
 
 WorkingDirectory=%h/
-ExecStart=/bin/podman-volume-porter backup '*'
+ExecStart=/usr/local/bin/podman-volume-porter backup '*'
 
 Restart=on-failure
 RestartSec=30s
-StartLimitIntervalSec=300
-StartLimitBurst=10

@@ -3,13 +3,16 @@ name: Build and Release
 on:
     push:
         branches: ["main"]
-        tags:
-            - "v*"
+        tags: ["*"]
     pull_request:
         branches: ["main"]
 
 permissions:
-    contents: write # 允许 Action 创建 Release 并上传文件
+    contents: write # 允许 Action 创建 Tag 与 Release 并上传文件
+
+concurrency:
+    group: build-${{ github.ref }}
+    cancel-in-progress: false
 
 jobs:
     build:
@@ -17,41 +20,71 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            # 步骤 1：拉取代码
+            # 步骤 1：拉取代码（计算当日构建序号需要完整的 Tag 列表）
             - name: Checkout Code
-              uses: actions/checkout@v4
-
-            # 步骤 2：配置 Go 环境
-            - name: Set up Go
-              uses: actions/setup-go@v5
+              uses: actions/checkout@v7
               with:
-                  go-version: "1.26.x"
+                  fetch-depth: 0
+
+            # 步骤 2：配置 Go 环境（版本以 go.mod 为准）
+            - name: Set up Go
+              uses: actions/setup-go@v7
+              with:
+                  go-version-file: go.mod
                   cache: true
 
             # 步骤 3：下载依赖包
             - name: Download Dependencies
               run: go mod download
 
-            # 步骤 4：执行静态编译
+            # 步骤 4：单元测试
+            - name: Run Tests
+              run: go test ./...
+
+            # 步骤 5：生成版本号
+            # 推送 Tag 时直接使用 Tag 名；推送 main 时使用 UTC 日期 + 当日构建序号（如 2026.11.23-1）
+            - name: Resolve Version
+              id: version
+              run: |
+                  set -euo pipefail
+                  if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+                      version="${GITHUB_REF_NAME}"
+                  else
+                      date="$(date -u +%Y.%m.%d)"
+                      max=0
+                      for tag in $(git tag -l "${date}-*"); do
+                          n="${tag##*-}"
+                          case "${n}" in
+                              ''|*[!0-9]*) continue ;;
+                          esac
+                          if [ "${n}" -gt "${max}" ]; then
+                              max="${n}"
+                          fi
+                      done
+                      version="${date}-$((max + 1))"
+                  fi
+                  echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+            # 步骤 6：静态编译并写入版本号
             - name: Build Binary
               run: |
-                  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o podman-volume-porter-linux-amd64 main.go
+                  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" -o podman-volume-porter-linux-amd64 .
 
-            # 步骤 5：把编译好的文件作为 Artifact 保存下来，在网页端随时下载
+            # 步骤 7：把编译好的文件作为 Artifact 保存下来，在网页端随时下载
             - name: Upload Artifact
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: podman-volume-porter-linux-amd64
                   path: podman-volume-porter-linux-amd64
                   retention-days: 7
 
-            # 步骤 6：如果你推了一个 v1.0.0 的 Tag，自动创建 GitHub Release 并上传文件！
+            # 步骤 8：推送 main 或 Tag 时自动创建 Release 并上传文件
             - name: Create Release and Upload Asset
-              uses: softprops/action-gh-release@v2
-              # 仅在打 tag 时触发此步骤
-              if: startsWith(github.ref, 'refs/tags/')
+              uses: softprops/action-gh-release@v3
+              if: github.event_name == 'push'
               with:
+                  tag_name: ${{ steps.version.outputs.version }}
+                  name: ${{ steps.version.outputs.version }}
+                  target_commitish: ${{ github.sha }}
                   files: podman-volume-porter-linux-amd64
                   generate_release_notes: true # 自动根据 commit 生成更新日志
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

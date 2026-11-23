@@ -110,7 +110,7 @@ func (s *S3Storage) ObjectExists(ctx context.Context, key string) (bool, error) 
 	return false, err
 }
 
-func (s S3Storage) GetObjectStream(ctx context.Context, key string) (io.Reader, error) {
+func (s S3Storage) GetObjectStream(ctx context.Context, key string) (io.ReadCloser, error) {
 	s3Client, err := s.getS3Client(ctx)
 	if err != nil {
 		return nil, err

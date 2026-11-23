@@ -6,6 +6,8 @@ import (
 	"strconv"
 )
 
+const defaultTaskTimeout = 7200
+
 func GetEnv(key string, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -42,13 +44,20 @@ func GetBoolEnv(key string, fallback bool) bool {
 }
 
 type AppConfig struct {
+	// TaskTimeout 为单次任务超时时间，单位秒。
 	TaskTimeout int
 }
 
 var Config *AppConfig
 
 func LoadConfig() {
+	timeout := GetIntEnv("TASK_TIMEOUT", defaultTaskTimeout)
+	if timeout <= 0 {
+		fmt.Fprintf(os.Stderr, "环境变量 TASK_TIMEOUT=%d 无效（必须为正整数秒），将使用默认值 %d\n", timeout, defaultTaskTimeout)
+		timeout = defaultTaskTimeout
+	}
+
 	Config = &AppConfig{
-		TaskTimeout: GetIntEnv("TASK_TIMEOUT", 7200),
+		TaskTimeout: timeout,
 	}
 }

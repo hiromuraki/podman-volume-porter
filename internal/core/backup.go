@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+// getBackupKey 按 now 所在时区判定备份类型（月/周/日），时间戳统一以 UTC 记录。
 func getBackupKey(volumeName string, now time.Time) string {
 	var backupType string
 
@@ -25,7 +27,7 @@ func getBackupKey(volumeName string, now time.Time) string {
 		backupType = "daily"
 	}
 
-	timestamp := now.Format("20060102T150405Z")
+	timestamp := now.UTC().Format("20060102T150405Z")
 
 	return fmt.Sprintf("%s/%s_%s.tar.zstd", volumeName, timestamp, backupType)
 }
@@ -46,15 +48,19 @@ func filterVolumeNames(allVolumeNames []string, namePattern string) []string {
 }
 
 func (e Engine) backupVolume(ctx context.Context, volumeName string, allowOverride bool) error {
-	if !podman.volumeExists(ctx, volumeName) {
+	exists, err := podman.volumeExists(ctx, volumeName)
+	if err != nil {
+		return err
+	}
+	if !exists {
 		return fmt.Errorf("卷 %s 不存在", volumeName)
 	}
 
-	key := getBackupKey(volumeName, time.Now().UTC())
+	key := getBackupKey(volumeName, time.Now())
 
 	keyExists, err := e.Storage.ObjectExists(ctx, key)
 	if err != nil {
-		return fmt.Errorf("无法检测文件 [%s]:%s 存在性", e.Storage.BucketName, key)
+		return fmt.Errorf("无法检测文件 [%s]:%s 存在性: %w", e.Storage.BucketName, key, err)
 	}
 	if keyExists && !allowOverride {
 		return fmt.Errorf("文件 [%s]:%s 已存在", e.Storage.BucketName, key)
@@ -65,37 +71,44 @@ func (e Engine) backupVolume(ctx context.Context, volumeName string, allowOverri
 	defer pr.Close()
 
 	go func() {
-		zw, _ := zstd.NewWriter(pw)
+		zw, err := zstd.NewWriter(pw)
+		if err != nil {
+			pw.CloseWithError(fmt.Errorf("初始化 Zstd 压缩器失败: %w", err))
+			return
+		}
 
 		cmd := exec.CommandContext(ctx, "podman", "volume", "export", volumeName)
 		cmd.Stdout = zw
 
-		err := cmd.Run()
-		zw.Close()
-
-		if err != nil {
-			pw.CloseWithError(err)
-		} else {
-			pw.Close()
+		if err := cmd.Run(); err != nil {
+			zw.Close()
+			pw.CloseWithError(fmt.Errorf("导出卷 %s 失败: %w", volumeName, err))
+			return
 		}
+
+		if err := zw.Close(); err != nil {
+			pw.CloseWithError(fmt.Errorf("结束 Zstd 压缩失败: %w", err))
+			return
+		}
+
+		pw.Close()
 	}()
 
-	if err := e.Storage.UploadStream(ctx, key, pr); err != nil {
+	return e.Storage.UploadStream(ctx, key, pr)
+}
+
+func (e Engine) BackupAction(ctx context.Context, volumeNamePattern string, allowOverride bool, dryRun bool) error {
+	allVolumeNames, err := podman.getAllVolumeNames(ctx)
+	if err != nil {
 		return err
 	}
 
-	return nil
-}
-
-func (e Engine) BackupAction(ctx context.Context, volumeNamePattern string, allowOverride bool, dryRun bool) {
-	allVolumeNames := podman.getAllVolumeNames()
 	matchedVolumeNames := filterVolumeNames(allVolumeNames, volumeNamePattern)
-
 	if len(matchedVolumeNames) == 0 {
-		e.Logger.Error(fmt.Sprintf("未找到匹配的卷: %s", volumeNamePattern))
-		return
+		return fmt.Errorf("未找到匹配的卷: %s", volumeNamePattern)
 	}
 
+	var errs []error
 	for _, v := range matchedVolumeNames {
 		if dryRun {
 			e.Logger.Info(fmt.Sprintf("[DryRun] 备份卷：%s", v))
@@ -103,12 +116,13 @@ func (e Engine) BackupAction(ctx context.Context, volumeNamePattern string, allo
 		}
 
 		e.Logger.Info(fmt.Sprintf("备份卷：%s", v))
-		err := e.backupVolume(ctx, v, allowOverride)
-		if err != nil {
-			e.Logger.Error(fmt.Sprintf("卷 %s 备份时发生错误: %v", v, err))
+		if err := e.backupVolume(ctx, v, allowOverride); err != nil {
+			errs = append(errs, fmt.Errorf("卷 %s: %w", v, err))
 			continue
 		}
 
 		e.Logger.Success(fmt.Sprintf("卷 %s 备份成功", v))
 	}
+
+	return errors.Join(errs...)
 }
