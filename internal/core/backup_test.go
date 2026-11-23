@@ -21,7 +21,7 @@ func TestFilterVolumeNames(t *testing.T) {
 
 	tests := []struct {
 		name         string   // 测试用例描述
-		pattern      string   // 输入的匹配模式
+		includes     []string // 包含模式
 		excludes     []string // 排除模式
 		wantMatched  []string // 期望得到的结果
 		wantExcluded []string // 期望被排除的卷
@@ -29,42 +29,47 @@ func TestFilterVolumeNames(t *testing.T) {
 	}{
 		{
 			name:        "全匹配通配符",
-			pattern:     "*",
+			includes:    []string{"*"},
 			wantMatched: allVolumes,
 		},
 		{
 			name:        "后缀匹配",
-			pattern:     "*-data",
+			includes:    []string{"*-data"},
 			wantMatched: []string{"seaweed-data"},
 		},
 		{
 			name:        "前缀匹配",
-			pattern:     "seaweed-*",
+			includes:    []string{"seaweed-*"},
 			wantMatched: []string{"seaweed-config", "seaweed-data"},
 		},
 		{
 			name:        "中间包含匹配",
-			pattern:     "*weed*",
+			includes:    []string{"*weed*"},
 			wantMatched: []string{"seaweed-config", "seaweed-data"},
 		},
 		{
 			name:        "精确匹配",
-			pattern:     "test",
+			includes:    []string{"test"},
 			wantMatched: []string{"test"},
 		},
 		{
 			name:        "无任何匹配",
-			pattern:     "nginx*",
+			includes:    []string{"nginx*"},
 			wantMatched: []string{},
 		},
 		{
 			name:        "特殊字符匹配 (?)",
-			pattern:     "tes?",
+			includes:    []string{"tes?"},
 			wantMatched: []string{"test"},
 		},
 		{
-			name:     "排除后缀",
-			pattern:  "*",
+			name:        "多个包含模式取并集",
+			includes:    []string{"*-data", "mysql-*"},
+			wantMatched: []string{"seaweed-data", "mysql-db"},
+		},
+		{
+			name:     "同时命中包含与排除时排除优先",
+			includes: []string{"*"},
 			excludes: []string{"*-cache"},
 			wantMatched: []string{
 				"seaweed-config",
@@ -77,7 +82,7 @@ func TestFilterVolumeNames(t *testing.T) {
 		},
 		{
 			name:     "多个排除模式",
-			pattern:  "*",
+			includes: []string{"*"},
 			excludes: []string{"*-cache", "test"},
 			wantMatched: []string{
 				"seaweed-config",
@@ -89,33 +94,37 @@ func TestFilterVolumeNames(t *testing.T) {
 		},
 		{
 			name:         "排除后为空",
-			pattern:      "*-data",
+			includes:     []string{"*-data"},
 			excludes:     []string{"seaweed-*"},
 			wantMatched:  []string{},
 			wantExcluded: []string{"seaweed-data"},
 		},
 		{
 			name:        "排除模式不命中",
-			pattern:     "test",
+			includes:    []string{"test"},
 			excludes:    []string{"nginx*"},
 			wantMatched: []string{"test"},
 		},
 		{
-			name:    "匹配模式语法错误",
-			pattern: "[",
-			wantErr: true,
+			name:     "包含模式语法错误",
+			includes: []string{"["},
+			wantErr:  true,
 		},
 		{
 			name:     "排除模式语法错误",
-			pattern:  "*",
+			includes: []string{"*"},
 			excludes: []string{"["},
 			wantErr:  true,
+		},
+		{
+			name:    "缺少包含模式",
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotMatched, gotExcluded, err := filterVolumeNames(allVolumes, tt.pattern, tt.excludes)
+			gotMatched, gotExcluded, err := filterVolumeNames(allVolumes, tt.includes, tt.excludes)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("filterVolumeNames() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -212,7 +221,7 @@ echo tmp-cache
 	logger := &recordingLogger{}
 	engine := Engine{Logger: logger}
 
-	if err := engine.BackupAction(context.Background(), "app-*", []string{"*-cache"}, false, true); err != nil {
+	if err := engine.BackupAction(context.Background(), []string{"app-*"}, []string{"*-cache"}, false, true); err != nil {
 		t.Fatalf("BackupAction() error = %v", err)
 	}
 
@@ -239,7 +248,7 @@ echo app-cache
 
 	engine := Engine{Logger: &recordingLogger{}}
 
-	err := engine.BackupAction(context.Background(), "app-*", []string{"*"}, false, true)
+	err := engine.BackupAction(context.Background(), []string{"app-*"}, []string{"*"}, false, true)
 	if err == nil || !strings.Contains(err.Error(), "均被 --exclude 排除") {
 		t.Fatalf("BackupAction() error = %v, 期望提示全部被排除", err)
 	}

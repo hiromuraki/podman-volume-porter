@@ -33,10 +33,17 @@ func getBackupKey(volumeName string, now time.Time) string {
 	return fmt.Sprintf("%s/%s_%s.tar.zstd", volumeName, timestamp, backupType)
 }
 
-// filterVolumeNames 先按 namePattern 匹配卷名，再剔除命中任一排除模式的卷。
-func filterVolumeNames(allVolumeNames []string, namePattern string, excludePatterns []string) (matched []string, excluded []string, err error) {
-	if _, err := path.Match(namePattern, ""); err != nil {
-		return nil, nil, fmt.Errorf("卷名匹配模式 %q 无效: %w", namePattern, err)
+// filterVolumeNames 先匹配任一包含模式，再剔除命中任一排除模式的卷。
+// 同时命中包含与排除的卷以排除为准。
+func filterVolumeNames(allVolumeNames []string, includePatterns []string, excludePatterns []string) (matched []string, excluded []string, err error) {
+	if len(includePatterns) == 0 {
+		return nil, nil, fmt.Errorf("至少需要一个包含模式")
+	}
+
+	for _, pattern := range includePatterns {
+		if _, err := path.Match(pattern, ""); err != nil {
+			return nil, nil, fmt.Errorf("包含模式 %q 无效: %w", pattern, err)
+		}
 	}
 	for _, pattern := range excludePatterns {
 		if _, err := path.Match(pattern, ""); err != nil {
@@ -46,8 +53,14 @@ func filterVolumeNames(allVolumeNames []string, namePattern string, excludePatte
 
 	matched = make([]string, 0)
 	for _, vol := range allVolumeNames {
-		isMatch, _ := path.Match(namePattern, vol)
-		if !isMatch {
+		isIncluded := false
+		for _, pattern := range includePatterns {
+			if hit, _ := path.Match(pattern, vol); hit {
+				isIncluded = true
+				break
+			}
+		}
+		if !isIncluded {
 			continue
 		}
 
@@ -120,13 +133,13 @@ func (e Engine) backupVolume(ctx context.Context, volumeName string, allowOverri
 	return e.Storage.UploadStream(ctx, key, pr)
 }
 
-func (e Engine) BackupAction(ctx context.Context, volumeNamePattern string, excludePatterns []string, allowOverride bool, dryRun bool) error {
+func (e Engine) BackupAction(ctx context.Context, includePatterns []string, excludePatterns []string, allowOverride bool, dryRun bool) error {
 	allVolumeNames, err := podman.getAllVolumeNames(ctx)
 	if err != nil {
 		return err
 	}
 
-	matchedVolumeNames, excludedVolumeNames, err := filterVolumeNames(allVolumeNames, volumeNamePattern, excludePatterns)
+	matchedVolumeNames, excludedVolumeNames, err := filterVolumeNames(allVolumeNames, includePatterns, excludePatterns)
 	if err != nil {
 		return err
 	}
@@ -135,7 +148,7 @@ func (e Engine) BackupAction(ctx context.Context, volumeNamePattern string, excl
 		if len(excludedVolumeNames) > 0 {
 			return fmt.Errorf("匹配到的 %d 个卷均被 --exclude 排除: %s", len(excludedVolumeNames), strings.Join(excludedVolumeNames, ", "))
 		}
-		return fmt.Errorf("未找到匹配的卷: %s", volumeNamePattern)
+		return fmt.Errorf("未找到匹配的卷: %s", strings.Join(includePatterns, ", "))
 	}
 
 	if dryRun {

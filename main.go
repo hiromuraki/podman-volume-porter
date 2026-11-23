@@ -16,6 +16,7 @@ var version = "dev"
 var (
 	dryRun          bool
 	allowOverride   bool
+	includePatterns []string
 	excludePatterns []string
 	restoreFrom     string
 	engine          core.Engine
@@ -32,14 +33,26 @@ var rootCmd = &cobra.Command{
 }
 
 var backupCmd = &cobra.Command{
-	Use:   "backup <volumeNamePattern>",
+	Use:   "backup [volumeNamePattern]",
 	Short: "备份指定的 Podman 卷至 S3，支持通配符",
-	Args:  cobra.ExactArgs(1),
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) > 1 {
+			return fmt.Errorf("最多允许一个位置参数，更多包含模式请使用 --include")
+		}
+		if len(args) == 0 && len(includePatterns) == 0 {
+			return fmt.Errorf("必须通过位置参数或 --include 指定至少一个卷名模式")
+		}
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(core.Config.TaskTimeout)*time.Second)
 		defer cancel()
 
-		return engine.BackupAction(ctx, args[0], excludePatterns, allowOverride, dryRun)
+		patterns := make([]string, 0, len(args)+len(includePatterns))
+		patterns = append(patterns, args...)
+		patterns = append(patterns, includePatterns...)
+
+		return engine.BackupAction(ctx, patterns, excludePatterns, allowOverride, dryRun)
 	},
 }
 
@@ -61,7 +74,8 @@ func init() {
 
 	// 子命令特有 Flag
 	backupCmd.Flags().BoolVar(&allowOverride, "allow-override", false, "备份数据存在时是否强制覆盖")
-	backupCmd.Flags().StringArrayVar(&excludePatterns, "exclude", nil, "排除匹配的卷名模式，可重复指定")
+	backupCmd.Flags().StringArrayVar(&includePatterns, "include", nil, "包含匹配的卷名模式，可重复指定并与位置参数取并集")
+	backupCmd.Flags().StringArrayVar(&excludePatterns, "exclude", nil, "排除匹配的卷名模式，可重复指定，优先于包含模式")
 	restoreCmd.Flags().StringVar(&restoreFrom, "from", "", "指定恢复的备份前缀 (例如: 20260309)")
 
 	rootCmd.AddCommand(backupCmd)
