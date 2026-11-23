@@ -232,8 +232,11 @@ echo tmp-cache
 	if !strings.Contains(joined, "app-data") {
 		t.Errorf("dry-run 输出缺少卷名: %v", logger.infos)
 	}
-	if strings.Contains(joined, "app-cache") || strings.Contains(joined, "tmp-cache") {
-		t.Errorf("dry-run 输出包含被排除的卷: %v", logger.infos)
+	if !strings.Contains(joined, "已排除 1 个卷") {
+		t.Errorf("dry-run 输出缺少排除信息: %v", logger.infos)
+	}
+	if strings.Contains(joined, "tmp-cache") {
+		t.Errorf("dry-run 输出包含未匹配的卷: %v", logger.infos)
 	}
 	if len(logger.successes) != 0 {
 		t.Errorf("dry-run 不应执行备份: %v", logger.successes)

@@ -15,6 +15,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+const (
+	// uploadPartSizeBytes 是分片上传的单片大小，64 MiB × 10000 片约为 S3 单对象上限的一半。
+	uploadPartSizeBytes = 64 << 20
+	// uploadConcurrency 是并发上传的分片数，内存峰值约为 (uploadConcurrency+1) × uploadPartSizeBytes。
+	uploadConcurrency = 3
+)
+
 type S3Storage struct {
 	EndpointUrl  string
 	AccessKey    string
@@ -136,7 +143,12 @@ func (s S3Storage) UploadStream(ctx context.Context, key string, reader io.Reade
 	}
 
 	// 4. 初始化 Transfer Manager
-	tm := transfermanager.New(s3Client)
+	// 流式上传无法预知对象大小，默认 8 MiB 分片 × 10000 片会在压缩后约 78 GiB 处失败。
+	// 这里提高到 64 MiB 分片（上限约 625 GiB），并发降到 3 以控制内存峰值（约 256 MiB）。
+	tm := transfermanager.New(s3Client, func(o *transfermanager.Options) {
+		o.PartSizeBytes = uploadPartSizeBytes
+		o.Concurrency = uploadConcurrency
+	})
 
 	// 5. 执行上传
 	_, err = tm.UploadObject(ctx, &transfermanager.UploadObjectInput{

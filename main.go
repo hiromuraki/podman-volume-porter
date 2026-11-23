@@ -28,7 +28,7 @@ var rootCmd = &cobra.Command{
 	Version:      version,
 	SilenceUsage: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		setupEngine()
+		setupEngine(cmd)
 	},
 }
 
@@ -82,19 +82,28 @@ func init() {
 	rootCmd.AddCommand(restoreCmd)
 }
 
-func setupEngine() {
+// preflightTimeout 是启动时 S3 连通性预检的超时，避免端点无响应时无限阻塞。
+const preflightTimeout = 30 * time.Second
+
+func setupEngine(cmd *cobra.Command) {
 	core.LoadConfig()
 	engine = core.Engine{
 		Logger: core.ConsoleLogger{},
 		UI:     core.ConsoleUI{},
-		Storage: core.S3Storage{
-			EndpointUrl:  core.GetEnv("S3_ENDPOINT_URL", ""),
-			AccessKey:    core.GetEnv("S3_ACCESS_KEY", ""),
-			SecretKey:    core.GetEnv("S3_SECRET_KEY", ""),
-			BucketName:   core.GetEnv("S3_BUCKET_NAME", "container-volume"),
-			Region:       core.GetEnv("S3_REGION", "cn-beijing"),
-			UsePathStyle: core.GetBoolEnv("S3_USE_PATH_STYLE", false),
-		},
+	}
+
+	// backup --dry-run 只需要本地卷列表，不访问 S3
+	if dryRun && cmd.Name() == "backup" {
+		return
+	}
+
+	engine.Storage = core.S3Storage{
+		EndpointUrl:  core.GetEnv("S3_ENDPOINT_URL", ""),
+		AccessKey:    core.GetEnv("S3_ACCESS_KEY", ""),
+		SecretKey:    core.GetEnv("S3_SECRET_KEY", ""),
+		BucketName:   core.GetEnv("S3_BUCKET_NAME", "container-volume"),
+		Region:       core.GetEnv("S3_REGION", "cn-beijing"),
+		UsePathStyle: core.GetBoolEnv("S3_USE_PATH_STYLE", false),
 	}
 
 	// 环境检查
@@ -104,7 +113,10 @@ func setupEngine() {
 	}
 
 	// 连通性预检
-	isS3Available, err := engine.Storage.IsAvailable(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), preflightTimeout)
+	defer cancel()
+
+	isS3Available, err := engine.Storage.IsAvailable(ctx)
 	if !isS3Available {
 		fmt.Fprintf(os.Stderr, "❌ 错误: 无法连接至 S3 存储. %s\n", err.Error())
 		os.Exit(1)

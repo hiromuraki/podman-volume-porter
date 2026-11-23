@@ -41,6 +41,39 @@ func (p Podman) importVolume(ctx context.Context, volumeName string, source io.R
 	return cmd.Run()
 }
 
+// copyVolume 通过本地流把 src 卷内容复制到新建的 dst 卷。
+func (p Podman) copyVolume(ctx context.Context, src string, dst string) error {
+	if err := exec.CommandContext(ctx, "podman", "volume", "create", dst).Run(); err != nil {
+		return fmt.Errorf("无法创建卷 %s: %w", dst, err)
+	}
+
+	exportCmd := exec.CommandContext(ctx, "podman", "volume", "export", src)
+	stdout, err := exportCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("导出卷 %s 失败: %w", src, err)
+	}
+	exportCmd.Stderr = os.Stderr
+	if err := exportCmd.Start(); err != nil {
+		return fmt.Errorf("导出卷 %s 失败: %w", src, err)
+	}
+
+	importCmd := exec.CommandContext(ctx, "podman", "volume", "import", dst, "-")
+	importCmd.Stdin = stdout
+	importCmd.Stdout = os.Stdout
+	importCmd.Stderr = os.Stderr
+	importErr := importCmd.Run()
+	exportErr := exportCmd.Wait()
+
+	if importErr != nil {
+		return fmt.Errorf("写入卷 %s 失败: %w", dst, importErr)
+	}
+	if exportErr != nil {
+		return fmt.Errorf("导出卷 %s 失败: %w", src, exportErr)
+	}
+
+	return nil
+}
+
 func (p Podman) deleteVolume(ctx context.Context, volumeName string) error {
 	if err := exec.CommandContext(ctx, "podman", "volume", "rm", "-f", volumeName).Run(); err != nil {
 		return fmt.Errorf("删除卷 %s 失败: %w", volumeName, err)

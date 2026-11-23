@@ -1,8 +1,10 @@
 package core
 
 import (
+	"context"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestFilterObjectKeys(t *testing.T) {
@@ -110,6 +112,76 @@ func TestSortObjectKeys(t *testing.T) {
 
 			if !reflect.DeepEqual(inputKeys, tt.want) {
 				t.Errorf("sortObjectKeys() = \n%v\nwant \n%v", inputKeys, tt.want)
+			}
+		})
+	}
+}
+
+func TestFindBestMatchedKeyRejectsForeignKey(t *testing.T) {
+	engine := Engine{}
+
+	if _, err := engine.findBestMatchedKey(context.Background(), "vol-a", "vol-b/20260309T152027Z_daily.tar.zstd"); err == nil {
+		t.Error("期望拒绝属于其他卷的完整对象键")
+	}
+
+	got, err := engine.findBestMatchedKey(context.Background(), "vol-a", "vol-a/20260309T152027Z_daily.tar.zstd")
+	if err != nil {
+		t.Fatalf("findBestMatchedKey() error = %v", err)
+	}
+	if want := "vol-a/20260309T152027Z_daily.tar.zstd"; got != want {
+		t.Errorf("findBestMatchedKey() = %q, want %q", got, want)
+	}
+}
+
+func TestLocalTimestamp(t *testing.T) {
+	shanghai := time.FixedZone("CST", 8*3600)
+
+	tests := []struct {
+		name string
+		key  string
+		want string
+		ok   bool
+	}{
+		{name: "UTC 前一日换算为本地次日", key: "vol/20260228T200000Z_monthly.tar.zstd", want: "20260301T040000", ok: true},
+		{name: "缺少时间戳", key: "vol/README.md", want: "", ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := localTimestamp(tt.key, shanghai)
+			if ok != tt.ok || got != tt.want {
+				t.Errorf("localTimestamp() = (%q, %v), want (%q, %v)", got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestSelectKeyByLocalPrefix(t *testing.T) {
+	shanghai := time.FixedZone("CST", 8*3600)
+	// 已按 UTC 时间倒序排列
+	sortedKeys := []string{
+		"vol/20260302T200000Z_daily.tar.zstd",   // 本地 20260303T040000
+		"vol/20260301T200000Z_daily.tar.zstd",   // 本地 20260302T040000
+		"vol/20260228T200000Z_monthly.tar.zstd", // 本地 20260301T040000
+	}
+
+	tests := []struct {
+		name   string
+		prefix string
+		want   string
+		ok     bool
+	}{
+		{name: "按本地月份取最新", prefix: "202603", want: sortedKeys[0], ok: true},
+		{name: "按本地日期匹配", prefix: "20260302", want: sortedKeys[1], ok: true},
+		{name: "按本地时刻匹配", prefix: "20260301T04", want: sortedKeys[2], ok: true},
+		{name: "无匹配", prefix: "202604", ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := selectKeyByLocalPrefix(sortedKeys, tt.prefix, shanghai)
+			if ok != tt.ok || got != tt.want {
+				t.Errorf("selectKeyByLocalPrefix() = (%q, %v), want (%q, %v)", got, ok, tt.want, tt.ok)
 			}
 		})
 	}

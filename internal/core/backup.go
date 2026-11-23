@@ -156,6 +156,12 @@ func (e Engine) BackupAction(ctx context.Context, includePatterns []string, excl
 		for _, v := range matchedVolumeNames {
 			e.Logger.Info("  - " + v)
 		}
+		if len(excludedVolumeNames) > 0 {
+			e.Logger.Info(fmt.Sprintf("[DryRun] 已排除 %d 个卷：", len(excludedVolumeNames)))
+			for _, v := range excludedVolumeNames {
+				e.Logger.Info("  - " + v)
+			}
+		}
 		return nil
 	}
 

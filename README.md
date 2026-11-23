@@ -4,7 +4,7 @@
 
 ## ✨ 核心特性
 
-* 🚀 **全流式处理 (Zero-Disk-Footprint)**：备份和恢复过程完全在内存管道中进行（Podman -> Tar Stream -> Zstd -> S3），无论你的卷有多大，都不需要占用宿主机额外的磁盘空间。
+* 🚀 **全流式处理 (Zero-Disk-Footprint)**：备份和恢复过程完全在内存管道中进行（Podman -> Tar Stream -> Zstd -> S3），不需要占用宿主机额外的磁盘空间；上传按 64 MiB 分片、并发 3，内存峰值约 256 MiB，单个备份对象上限约 625 GiB。
 * ☁️ **原生 S3 兼容**：完美兼容标准的 S3 API，通过简单的环境变量即可接入任何对象存储。
 * 🎯 **智能通配符匹配**：支持 Shell 风格的通配符（如 `podman-volume-porter backup *-data`），一键批量备份多个业务卷。
 * 📅 **自动分级标记**：无需数据库记录，程序会自动根据当前时间戳判定备份性质，自动打上 `daily`、`weekly`（每周一）或 `monthly`（每月1号）的标签。
@@ -49,6 +49,8 @@ export TASK_TIMEOUT="7200"                      # （可选）单次任务超时
 
 systemd 单元默认从 `%h/.env.podman-volume-porter` 加载上述变量；在 shell 中手动运行时可先执行 `set -a; . "$HOME/.env.podman-volume-porter"; set +a` 导入。
 
+> 建议为存储桶配置 `AbortIncompleteMultipartUpload` 生命周期规则，清理上传中断后残留的分片；`NO_COLOR=1` 可禁用日志颜色。
+
 ## 🚀 使用说明
 
 使用 `podman-volume-porter --help` 可以随时查看动态帮助信息，使用 `podman-volume-porter --version` 查看当前版本。
@@ -74,7 +76,7 @@ podman-volume-porter backup "*-data" --dry-run
 podman-volume-porter backup db-data --allow-override
 ```
 
-*💡 提示：备份后的文件在 S3 中会自动命名为 `<卷名>/<时间戳>_<类型>.tar.zstd`。如 `mysql-data/20260309T152027Z_weekly.tar.zstd`*
+*💡 提示：备份后的文件在 S3 中会自动命名为 `<卷名>/<时间戳>_<类型>.tar.zstd`，如 `mysql-data/20260309T152027Z_weekly.tar.zstd`。时间戳为 UTC，`daily`/`weekly`/`monthly` 类型按本地时区判定。*
 
 ### 2. 恢复卷 (Restore)
 
@@ -94,7 +96,9 @@ podman-volume-porter restore mysql-data --from 20260301
 podman-volume-porter restore mysql-data --dry-run
 ```
 
-*⚠️ 提示：恢复会先移除同名旧卷再导入备份，旧卷内容不可恢复；执行前请确认目标卷已停止写入。*
+*`--from` 按本地日期/时间前缀匹配（如 `202603`、`20260301`），也可以传完整对象键（须属于该卷）。*
+
+*⚠️ 提示：恢复只恢复卷数据，不恢复卷的 driver/options/labels 配置；目标卷已存在时会先导入临时卷，成功后再替换旧卷，执行前请确认目标卷已停止写入。*
 
 ## 🤖 自动化建议 (Systemd Timer)
 
